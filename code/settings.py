@@ -1,0 +1,5 @@
+CLOUD_TRACE_FOLDER = '/home/nileshwar-gk/Projects/cloud-jobs/'
+SLACK_FOLDER = '/home/nileshwar-gk/Projects/statistical-traces/lognormal-slacks/MATLAB/'
+STATISTICAL_TRACE_FOLDER= '/home/nileshwar-gk/Projects/statistical-traces/running-trace/'
+RESULT_FOLDER = '~/results/'
+LOG_FOLDER = '~/log/'
