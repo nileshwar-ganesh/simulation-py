@@ -1,37 +1,31 @@
+import math
+
 from schedulingelements import Job, Container, Machine
-from functions import FileOperations
+from functions import Operations
+from settings import TEST_DATA
+from settings import DAYS, SLACKS, SD, MI2011, SETS
+from algorithms import AlgorithmGBalanced
+
+
+def _testing_case():
+    trace_id = '2011'
+    slack_set = 'MA'
+
+    machine_num = 100
+    core = 1
+    day = 1
+
+    operations = Operations()
+    operations.update_system_log('Started simulation.', True)
+
+    #operations.generate_statistical_trace(trace_id, slack_set, core, day)
+
+    file = operations.get_statistical_trace_file_location(trace_id, day, 0.1, 0.033, 1, 1, True)
+    jobs = operations.get_jobs(file)
+    machines = operations.get_machines(machine_num)
+    greedy_balanced = AlgorithmGBalanced(jobs, machines)
+    greedy_balanced.execute()
+
 
 if __name__ == '__main__':
-    print('Test file.')
-
-    j1 = Job("J1", 10, 0, 13, 1)
-    j2 = Job("J2", 5, 11, 20, 1)
-    j1.update(2, 12)
-    j2.update(12, 17)
-    c1 = Container('C1', j1, 2, 12)
-    c2 = Container('C2', j2, 12, 17)
-
-    m = Machine()
-    m.update(c1, 12)
-    m.update(c2, 17)
-
-    m.print_schedule()
-    print(m.get_available_time())
-
-    file = FileOperations()
-    file.test()
-
-
-
-
-
-
-
-def _read_jobs(file_path):
-    with open(file_path) as file:
-        content = file.readlines()
-
-    job_list = []
-    for data in content:
-        values = data.strip().split(";")
-
+    _testing_case()

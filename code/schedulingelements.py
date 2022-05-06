@@ -16,12 +16,14 @@ class Job:
         self.__due_time = due_time
         self.__job_core = job_core
 
+        self.__weight = 0
         self.__start_time = 0
         self.__completion_time = 0
 
-    def update(self, start_time, completion_time):
+    def update(self, start_time, completion_time, weight=0):
         self.__start_time = start_time
         self.__completion_time = completion_time
+        self.__weight = weight
 
     def get_job_id(self):
         return self.__job_id
@@ -38,14 +40,19 @@ class Job:
     def get_job_core(self):
         return self.__job_core
 
+    def get_weight(self):
+        return self.__weight
+
     def get_details(self):
-        return ("{} with {} cores: p_j = {}, r_j = {}, d_j = {}, start = {}, end = {}".format(self.__job_id,
-                                                                                              self.__job_core,
-                                                                                              self.__processing_time,
-                                                                                              self.__release_time,
-                                                                                              self.__due_time,
-                                                                                              self.__start_time,
-                                                                                              self.__completion_time))
+        return ("{} with {} cores: p_j = {}, r_j = {}, "
+                "d_j = {}, start = {}, end = {}, weight = {}".format(self.__job_id,
+                                                                     self.__job_core,
+                                                                     self.__processing_time,
+                                                                     self.__release_time,
+                                                                     self.__due_time,
+                                                                     self.__start_time,
+                                                                     self.__completion_time,
+                                                                     self.__weight))
 
     def print_details(self):
         print(self.get_details())
@@ -61,15 +68,33 @@ class Container:
     There are additional methods to access container details as a string as well as to print these details.
     """
 
-    def __init__(self, container_id, job, start_time, end_time):
+    def __init__(self, container_id):
         self.__id = container_id
+        self.__job = None
+        self.__start_time = None
+        self.__end_time = None
+        self.__vacant_size = None
+        self.__machine = None
+
+    def assign(self, job, start_time, end_time, machine_id):
         self.__job = job
         self.__start_time = start_time
         self.__end_time = end_time
+        self.__machine = machine_id
+        self.__vacant_size = 0
 
-    def update(self, start_time, end_time):
+    def reserve(self, start_time, end_time, vacant_size):
         self.__start_time = start_time
         self.__end_time = end_time
+        self.__vacant_size = vacant_size
+
+    def update(self, start_time, end_time, job=None, machine_id=None):
+        if job is not None and machine_id is not None:
+            self.__job = job
+            self.__machine = machine_id
+        self.__start_time = start_time
+        self.__end_time = end_time
+        self.__vacant_size = 0
 
     def get_id(self):
         return self.__id
@@ -83,11 +108,21 @@ class Container:
     def get_end_time(self):
         return self.__end_time
 
+    def get_vacant_size(self):
+        return self.__vacant_size
+
     def get_details(self):
-        return ("Container {}: Job {}, start = {}, end = {}".format(self.__id,
-                                                                  self.__job.get_job_id(),
-                                                                  self.__start_time,
-                                                                  self.__end_time))
+        if self.__vacant_size > 0:
+            return ("Vacant Container {}: Size {}, start = {}, end = {}".format(self.__id,
+                                                                                self.__vacant_size,
+                                                                                self.__start_time,
+                                                                                self.__end_time))
+        else:
+            return ("Container {}: Job {}, start = {}, end = {} on machine {}".format(self.__id,
+                                                                                      self.__job.get_job_id(),
+                                                                                      self.__start_time,
+                                                                                      self.__end_time,
+                                                                                      self.__machine))
 
     def print_details(self):
         print(self.get_details())
@@ -102,13 +137,17 @@ class Machine:
     There are additional methods to access the schedule as a string of job ids as well as to print these details.
     """
 
-    def __init__(self):
+    def __init__(self, machine_id):
+        self.__machine_id = machine_id
         self.__schedule = []
         self.__available_time = 0
 
     def update(self, container, completion_time):
         self.__schedule.append(container)
         self.__available_time = completion_time
+
+    def get_machine_id(self):
+        return self.__machine_id
 
     def get_available_time(self):
         return self.__available_time
@@ -121,3 +160,4 @@ class Machine:
 
     def print_schedule(self):
         print(self.get_schedule())
+
