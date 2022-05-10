@@ -54,6 +54,16 @@ class Job:
                                                                      self.__completion_time,
                                                                      self.__weight))
 
+    def get_stat(self):
+        return ("{}; {}; {}; {}; {}; {}; {}; {};".format(self.__job_id,
+                                                         self.__job_core,
+                                                         self.__processing_time,
+                                                         self.__release_time,
+                                                         self.__due_time,
+                                                         self.__start_time,
+                                                         self.__completion_time,
+                                                         self.__weight))
+
     def print_details(self):
         print(self.get_details())
 
@@ -153,9 +163,9 @@ class Machine:
         return self.__available_time
 
     def get_schedule(self):
-        schedule = ''
+        schedule = 'Machine ' + str(self.__machine_id) + ':'
         for container in self.__schedule:
-            schedule += container.get_job().get_job_id() + " "
+            schedule += container.get_job().get_job_id() + ' '
         return schedule
 
     def print_schedule(self):

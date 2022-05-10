@@ -1,0 +1,2 @@
+10/05/2022 16:58:58 	 greedybalanced simulation with 6 jobs on 10 machines, finished execution in 0.0002 seconds.
+10/05/2022 16:58:58 	 greedybestfit simulation with 6 jobs on 10 machines, finished execution in 0.0003 seconds.

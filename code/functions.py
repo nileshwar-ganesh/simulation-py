@@ -1,6 +1,7 @@
 import math
 import sys
 import os
+import shutil
 
 from datetime import datetime
 from settings import CLOUD_TRACE_FOLDER, SLACK_FOLDER, STATISTICAL_TRACE_FOLDER
@@ -14,6 +15,9 @@ class Operations:
     def __init__(self):
         pass
 
+    # Methods available for external use
+
+    # Read jobs from statistical trace file and returns them as a list
     @staticmethod
     def get_jobs(job_file):
         with open(job_file) as file:
@@ -27,6 +31,7 @@ class Operations:
 
         return jobs
 
+    # Initialize machines and return a list
     @staticmethod
     def get_machines(machine_num):
         machines = []
@@ -36,6 +41,8 @@ class Operations:
 
         return machines
 
+    # Generates statistical trace based on slack files and trace jobs
+    # Can be generated for all days at once or all traces for a single day based on day_nr=None
     @staticmethod
     def generate_statistical_trace(trace_id, slack_set, core, day_nr=None):
         if not day_nr:
@@ -74,6 +81,9 @@ class Operations:
                         Operations.update_system_log("Completed file {}".format(statistical_trace_file))
         Operations.update_system_log('Completed trace generation')
 
+    # Provides location of trace files based on simulation run type
+    # single=False, when we have enough space and all traces are generated well in advance
+    # single=True, when we generate trace for a day, run simulation and then clear it at the end
     @staticmethod
     def get_statistical_trace_file_location(trace_id, day, slack, standard_deviation, core, set_num, single=False):
         file_directory = Operations.__set_statistical_trace_file_location(core, day, single)
@@ -90,31 +100,95 @@ class Operations:
 
         return file_path
 
+
+    # LOG FILE METHODS
+    # Creates an entry into the main simulation log
     @staticmethod
-    def update_system_log(data, reset=False):
-        file_location = LOG_FOLDER + 'simulation-log.txt'
+    def update_system_log(algorithm_id, job_num, machine_num, execution_time, reset=False):
+        file_location = LOG_FOLDER + 'simulationlog.txt'
         if reset:
             file = open(file_location, 'w')
         else:
             file = open(file_location, 'a')
 
         stamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        data = "{} simulation with {} jobs on {} machines, "\
+               "finished execution in {} seconds.".format(algorithm_id,
+                                                          job_num,
+                                                          machine_num,
+                                                          execution_time)
         file.write("{} \t {}\n".format(stamp, data))
+        file.close()
 
+    # Creates and entry into the algorithm log
     @staticmethod
-    def update_algorithm_log(algorithm_id, data, reset=False):
-        file_location = LOG_FOLDER + algorithm_id + '.txt'
+    def update_algorithm_log(algorithm_id, job_num, machine_num, execution_time, reset=False):
+        file_folder = LOG_FOLDER + algorithm_id + '/'
+        if not os.path.exists(file_folder):
+            os.makedirs(file_folder)
+        file_location = file_folder + 'runtime.txt'
         if reset:
             file = open(file_location, 'w')
         else:
             file = open(file_location, 'a')
 
         stamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        data = "{}; {}; {};".format(job_num, machine_num, execution_time)
         file.write("{} \t {}\n".format(stamp, data))
+        file.close()
 
     @staticmethod
-    def get_machine_limit(jobs):
-        pass
+    def update_machine_log(algorithm_id, machines):
+        file_folder = LOG_FOLDER + algorithm_id + '/'
+        if not os.path.exists(file_folder):
+            os.makedirs(file_folder)
+        file_location = file_folder + 'machinelog.txt'
+        file = open(file_location, 'w')
+
+        stamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        for machine in machines:
+            file.write("{} \t {}\n".format(stamp, machine.get_schedule()))
+        file.close()
+
+    @staticmethod
+    def update_job_log(algorithm_id, accepted_jobs, rejected_jobs):
+        file_folder = LOG_FOLDER + algorithm_id + '/'
+        if not os.path.exists(file_folder):
+            os.makedirs(file_folder)
+        file_location = file_folder + 'joblog.txt'
+        file = open(file_location, 'w')
+
+        stamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        jobs = accepted_jobs + rejected_jobs
+        for job in jobs:
+            file.write("{} \t {}\n".format(stamp, job.get_stat()))
+        file.close()
+
+    @staticmethod
+    def clear_all_logs():
+        contents = []
+        if os.path.exists(LOG_FOLDER):
+            contents = os.listdir(LOG_FOLDER)
+
+        while len(contents) > 0:
+            content = contents.pop()
+            if os.path.isfile(os.path.join(LOG_FOLDER, content)):
+                os.remove(os.path.join(LOG_FOLDER, content))
+            elif os.path.isdir(os.path.join(LOG_FOLDER, content)):
+                shutil.rmtree(os.path.join(LOG_FOLDER, content))
+
+    @staticmethod
+    def clear_all_results():
+        contents = []
+        if os.path.exists(RESULT_FOLDER):
+            contents = os.listdir(RESULT_FOLDER)
+
+        while len(contents) > 0:
+            content = contents.pop()
+            if os.path.isfile(os.path.join(RESULT_FOLDER, content)):
+                os.remove(os.path.join(RESULT_FOLDER, content))
+            elif os.path.isdir(os.path.join(RESULT_FOLDER, content)):
+                shutil.rmtree(os.path.join(RESULT_FOLDER, content))
 
     @staticmethod
     def __get_trace_file_name(trace_id, day):
@@ -197,39 +271,6 @@ class Operations:
                                               due_time,
                                               job.get_job_core(),
                                               slack))
-
-
-class Simulation:
-
-    def __init__(self):
-        pass
-
-    @staticmethod
-    def run_complete(trace_id, slack_set, core, day, machine_num):
-        operations = Operations()
-
-        # Generate statistical trace
-        operations.generate_statistical_trace(trace_id, slack_set, core, day)
-
-        # Start simulation
-        machine_limit = None
-        for num in SETS:
-            for slack in SLACKS:
-                for value in SD:
-                    standard_deviation = round(slack/value)
-                    # Read jobs
-                    job_file = operations.get_statistical_trace_file_location(trace_id, day, slack, standard_deviation,
-                                                                              core, num, True)
-                    jobs = operations.get_jobs(job_file)
-
-                    if not machine_limit:
-                        pass
-
-                    # Initialize machines
-                    machines = operations.get_machines(machine_num)
-
-
-
 
 
 
