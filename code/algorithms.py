@@ -171,6 +171,10 @@ class AlgorithmGBalanced(Algorithm):
             # Check whether the job can be legally completed
             # Considering multi-core jobs, last core for job c = m - job_core
             start_core = super().get_machine_num() - job.get_job_core()
+            if start_core < 0:
+                super().update_rejected(job)
+                continue
+
             start_time = super()._get_start_time(job, start_core)
             completion_time = super()._get_completion_time(job, start_core)
             if completion_time <= job.get_due_time():
@@ -179,17 +183,17 @@ class AlgorithmGBalanced(Algorithm):
                     container.assign(job, start_time, completion_time,
                                      super().get_machine_list()[core].get_machine_id())
 
-                    self.update_machine(core, container, completion_time)
-                    self.update_container_list(container)
+                    super().update_machine(core, container, completion_time)
+                    super().update_container_list(container)
                     container_id += 1
 
                 job.update(start_time, completion_time)
-                self.update_accepted(job)
+                super().update_accepted(job)
             else:
-                self.update_rejected(job)
+                super().update_rejected(job)
         simulation_end_time = time.time()
         execution_time = round(simulation_end_time - simulation_start_time, 4)
-        self.update_execution_time(execution_time)
+        super().update_execution_time(execution_time)
 
         super()._update_logs()
         return super()._results()
@@ -219,11 +223,16 @@ class AlgorithmGBestFit(Algorithm):
             # Check whether the job can be legally completed
             # Considering multi-core jobs, last core for job c = m - job_core
             start_core = super().get_machine_num() - job.get_job_core()
+            if start_core < 0:
+                super().update_rejected(job)
+                continue
+
             start_time = super()._get_start_time(job, start_core)
             completion_time = super()._get_completion_time(job, start_core)
             if completion_time <= job.get_due_time():
                 start_core = super()._search_loaded_machine(job)
-
+                start_time = super()._get_start_time(job, start_core)
+                completion_time = super()._get_completion_time(job, start_core)
                 for core in range(start_core, start_core + job.get_job_core()):
                     container = Container(container_id)
                     container.assign(job, start_time, completion_time,
@@ -273,6 +282,10 @@ class AlgorithmThreshold(Algorithm):
                 super().update_rejected(job)
             else:
                 start_core = super().get_machine_num() - job.get_job_core()
+                if start_core < 0:
+                    super().update_rejected(job)
+                    continue
+
                 start_time = super()._get_start_time(job, start_core)
                 completion_time = super()._get_completion_time(job, start_core)
                 if completion_time <= job.get_due_time():
@@ -394,9 +407,87 @@ class AlgorithmThreshold(Algorithm):
 
 
 class AlgorithmGMinIdle(Algorithm):
-
+    """
+        this class basically inherits all properties of the Algorithm class.
+        this algorithm aims to minimize the total block created by the jobs scheduled.
+        first, we check whether we can schedule the job legally.
+        if yes, we accept it.
+        we then go through all machines on which the job can be scheduled and calculate the block time.
+        we select the cores, which are least blocked by this job and schedule the job.
+        in case of multicore jobs, we only consider machines {1, ..., m - core + 1} to check feasibility.
+    """
     def __init__(self, jobs, machines):
         super().__init__('greedyminidle', jobs, machines)
+
+    def execute(self, trial=False):
+        container_id = 1
+        simulation_start_time = time.time()
+        super()._sort_jobs_ascending_release_time()
+        while len(super().get_job_list()) > 0:
+            job = super().get_job_fifo()
+
+            # Sort machines based on reverse order of remaining load
+            super()._sort_machines_descending_avail_time()
+
+            # Check whether the job can be legally completed
+            # Considering multicore jobs, last core for job c = m - job_core
+            start_core = super().get_machine_num() - job.get_job_core()
+            if start_core < 0:
+                super().update_rejected(job)
+                continue
+
+            completion_time = super()._get_completion_time(job, start_core)
+            if completion_time <= job.get_due_time():
+                minimum_idle_time = None
+                minimum_idle_core = None
+                for start_core in range(super().get_machine_num() - job.get_job_core()):
+                    completion_time = super()._get_completion_time(job, start_core)
+                    if completion_time > job.get_due_time():
+                        continue
+                    else:
+                        start_time = super()._get_start_time(job, start_core)
+                        total_idle_time = 0
+                        for core in range(start_core, start_core + job.get_job_core()):
+                            total_idle_time += start_time - super().get_machine_list()[core].get_available_time()
+
+                        if minimum_idle_time is None:
+                            minimum_idle_time = total_idle_time
+                            minimum_idle_core = start_core
+                        elif minimum_idle_time > total_idle_time:
+                            minimum_idle_time = total_idle_time
+                            minimum_idle_core = start_core
+
+                start_time = super()._get_start_time(job, minimum_idle_core)
+                completion_time = super()._get_completion_time(job, minimum_idle_core)
+                for core in range(minimum_idle_core, minimum_idle_core + job.get_job_core()):
+                    container = Container(container_id)
+                    container.assign(job, start_time, completion_time,
+                                     super().get_machine_list()[core].get_machine_id())
+                    super().update_machine(core, container, completion_time)
+                    super().update_container_list(container)
+                    container_id += 1
+
+                job.update(start_time, completion_time)
+                super().update_accepted(job)
+            else:
+                super().update_rejected(job)
+
+        simulation_end_time = time.time()
+        execution_time = round(simulation_end_time - simulation_start_time, 4)
+        super().update_execution_time(execution_time)
+
+        super()._update_logs()
+        return super()._results()
+
+
+class AlgorithmBF(Algorithm):
+
+    def __init__(self, algorithm_id, jobs, machines):
+        super().__init__(algorithm_id, jobs, machines)
+        self.__open_containers = []
+
+    def get_open_containers(self):
+        return self.__open_containers
 
 
 class AlgorithmGBalancedBF:
