@@ -120,6 +120,22 @@ class Operations:
         file.write("{} \t {}\n".format(stamp, data))
         file.close()
 
+    @staticmethod
+    def update_time_log(algorithm_id, job_num, machine_num, execution_time, reset=False):
+        file_location = LOG_FOLDER + 'timelog.txt'
+        if reset:
+            file = open(file_location, 'w')
+        else:
+            file = open(file_location, 'a')
+
+        stamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        data = "{}; {}; {}; {}".format(algorithm_id,
+                                       job_num,
+                                       machine_num,
+                                       execution_time)
+        file.write("{} \t {}\n".format(stamp, data))
+        file.close()
+
     # Creates and entry into the algorithm log
     @staticmethod
     def update_algorithm_log(algorithm_id, job_num, machine_num, execution_time, reset=False):

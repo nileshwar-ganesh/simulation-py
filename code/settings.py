@@ -7,7 +7,7 @@ SLACK_FOLDER = {'JV': '/home/nileshwar-gk/Projects/statistical-traces/lognormal-
                 'MA': '/home/nileshwar-gk/Projects/statistical-traces/lognormal-slacks/MATLAB/',
                 'PY': '/home/nileshwar-gk/Projects/statistical-traces/lognormal-slacks/PYTHON/'}
 
-STATISTICAL_TRACE_FOLDER= '/home/nileshwar-gk/Projects/statistical-traces/'
+STATISTICAL_TRACE_FOLDER= '/home/nileshwar-gk/Projects/simulation-py/statisticaltraces/'
 RESULT_FOLDER = '/home/nileshwar-gk/Projects/simulation-py/results/'
 LOG_FOLDER = '/home/nileshwar-gk/Projects/simulation-py/log/'
 

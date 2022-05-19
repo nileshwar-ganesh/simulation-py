@@ -52,6 +52,9 @@ class Algorithm:
     def get_machine_num(self):
         return self.__machine_num
 
+    def get_rejected_jobs(self):
+        return self.__rejected_jobs
+
     # Update methods to modify private class variables
     def update_machine(self, core, container, completion_time):
         self.__machines[core].update(container, completion_time)
@@ -142,6 +145,7 @@ class Algorithm:
     def _update_logs(self):
         if not self.__trial_mode:
             self.__operations.update_system_log(self.__id, self.__job_num, self.__machine_num, self.__execution_time)
+            self.__operations.update_time_log(self.__id, self.__job_num, self.__machine_num, self.__execution_time)
             self.__operations.update_algorithm_log(self.__id, self.__job_num, self.__machine_num, self.__execution_time)
             self.__operations.update_machine_log(self.__id, self.__machines)
             self.__operations.update_job_log(self.__id, self.__accepted_jobs, self.__rejected_jobs)
@@ -274,8 +278,11 @@ class AlgorithmThreshold(Algorithm):
         simulation_start_time = time.time()
         super()._sort_jobs_ascending_release_time()
         f_values = self.__calculate_f_values_epsilon()
+
+        n = 1
         while len(super().get_job_list()) > 0:
             job = super().get_job_fifo()
+            n += 1
             deadline_threshold = self.__calculate_deadline_threshold(f_values, job)
 
             if job.get_due_time() < deadline_threshold:
@@ -286,11 +293,11 @@ class AlgorithmThreshold(Algorithm):
                     super().update_rejected(job)
                     continue
 
-                start_time = super()._get_start_time(job, start_core)
                 completion_time = super()._get_completion_time(job, start_core)
                 if completion_time <= job.get_due_time():
                     start_core = super()._search_loaded_machine(job)
-
+                    start_time = super()._get_start_time(job, start_core)
+                    completion_time = super()._get_completion_time(job, start_core)
                     for core in range(start_core, start_core + job.get_job_core()):
                         container = Container(container_id)
                         container.assign(job, start_time, completion_time,
@@ -440,22 +447,25 @@ class AlgorithmGMinIdle(Algorithm):
             if completion_time <= job.get_due_time():
                 minimum_idle_time = None
                 minimum_idle_core = None
-                for start_core in range(super().get_machine_num() - job.get_job_core()):
+                for start_core in range(0, super().get_machine_num() - job.get_job_core() + 1):
                     completion_time = super()._get_completion_time(job, start_core)
-                    if completion_time > job.get_due_time():
-                        continue
-                    else:
+                    if completion_time <= job.get_due_time():
                         start_time = super()._get_start_time(job, start_core)
                         total_idle_time = 0
                         for core in range(start_core, start_core + job.get_job_core()):
                             total_idle_time += start_time - super().get_machine_list()[core].get_available_time()
 
-                        if minimum_idle_time is None:
+                        if minimum_idle_core is None:
                             minimum_idle_time = total_idle_time
                             minimum_idle_core = start_core
-                        elif minimum_idle_time > total_idle_time:
+
+                        if minimum_idle_time > total_idle_time:
                             minimum_idle_time = total_idle_time
                             minimum_idle_core = start_core
+
+                if minimum_idle_core is None:
+                    print("ERROR: Valid core not found!")
+                    sys.exit()
 
                 start_time = super()._get_start_time(job, minimum_idle_core)
                 completion_time = super()._get_completion_time(job, minimum_idle_core)
