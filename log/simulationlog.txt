@@ -1,1 +1,1 @@
-11/06/2022 11:52:20 	 greedyminidle simulation with 15847 jobs on 150 machines, finished execution in 0.6596 seconds.
+11/06/2022 14:37:15 	 greedyminidle simulation with 15847 jobs on 150 machines, finished execution in 0.4523 seconds.
