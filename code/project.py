@@ -80,17 +80,21 @@ def _run_simulation():
 
         if "C30" in trace_file:
             increment = 20
-            machine_start = 30
+            machine_start = 150
             if "D5" in trace_file:
                 machine_limit = 331
             elif "D16" in trace_file:
                 machine_limit = 291
             elif "D24" in trace_file:
                 machine_limit = 311
+            elif "D11" in trace_file:
+                machine_limit = 151
 
-        scheduler.run_specific_day(trace_file, result_file,
-                                   increment, machine_start, machine_limit, slack)
+        if "C30" in trace_file and "D11" in trace_file:
+            scheduler.run_specific_day(trace_file, result_file,
+                                       increment, machine_start, machine_limit, slack)
 
+        break
 
 def _test_threshold():
     operations = Operations()
@@ -105,7 +109,27 @@ def _test_threshold():
 
     print(results_th)
 
+def _test_threshold_worst_case():
+    operations = Operations()
+    machine_num = 2
+
+    j1 = Job("J1", 10, 0, 11, 1);
+    j2 = Job("J2", 10, 0, 11, 1);
+    j3 = Job("J3", 30, 0, 33, 1);
+
+    jobs = [j1, j2 , j3];
+    machines = operations.get_machines(machine_num)
+
+    alg_th = AlgorithmThreshold(jobs, machines, 0.1)
+    results_th = alg_th.execute()
+
+    print(results_th)
+
+
+
+
 
 if __name__ == '__main__':
-    _test_threshold()
-    #_run_simulation()
+    #_test_threshold()
+    #_test_threshold_worst_case()
+    _run_simulation()

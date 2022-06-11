@@ -67,22 +67,22 @@ class Scheduler:
             results_gbf = greedy_bestfit.execute()
             data += str(results_gbf[2]) + ";" + str(results_gbf[3]) + ";" + str(results_gbf[4]) + ";"
             '''
-
+            '''
             if "C1" in trace_file:
                 jobs = copy.deepcopy(jobs_master)
                 machines = copy.deepcopy(machines_master)
                 threshold = AlgorithmThreshold(jobs, machines, slack)
                 results_th = threshold.execute()
                 data += str(results_th[2]) + ";" + str(results_th[3]) + ";" + str(results_th[4]) + ";"
-
             '''
+
             if "C30" in trace_file:
                 jobs = copy.deepcopy(jobs_master)
                 machines = copy.deepcopy(machines_master)
                 greedy_minidle = AlgorithmGMinIdle(jobs, machines)
                 results_gmi = greedy_minidle.execute()
                 data += str(results_gmi[2]) + ";" + str(results_gmi[3]) + ";" + str(results_gmi[4]) + ";"
-            '''
+
 
             print(data)
             data += '\n'

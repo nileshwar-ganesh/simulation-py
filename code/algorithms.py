@@ -444,12 +444,16 @@ class AlgorithmGMinIdle(Algorithm):
                 continue
 
             completion_time = super()._get_completion_time(job, start_core)
+            last_core = start_core
             if completion_time <= job.get_due_time():
                 minimum_idle_time = None
                 minimum_idle_core = None
-                for start_core in range(0, super().get_machine_num() - job.get_job_core() + 1):
+                for start_core in range(last_core, -1, -1):
                     completion_time = super()._get_completion_time(job, start_core)
-                    if completion_time <= job.get_due_time():
+
+                    if completion_time > job.get_due_time():
+                        break
+                    else:
                         start_time = super()._get_start_time(job, start_core)
                         total_idle_time = 0
                         for core in range(start_core, start_core + job.get_job_core()):
@@ -459,7 +463,7 @@ class AlgorithmGMinIdle(Algorithm):
                             minimum_idle_time = total_idle_time
                             minimum_idle_core = start_core
 
-                        if minimum_idle_time > total_idle_time:
+                        if minimum_idle_time >= total_idle_time:
                             minimum_idle_time = total_idle_time
                             minimum_idle_core = start_core
 
