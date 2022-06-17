@@ -9,6 +9,7 @@ from settings import RESULT_FOLDER, LOG_FOLDER
 from settings import RAW
 from settings import TRACE, DAYS, SLACKS, SD, MI2011, SETS
 from schedulingelements import Job, Machine
+from settings import MACHINE_START, MACHINE_END, MACHINE_INCREMENT
 
 
 class Operations:
@@ -81,6 +82,41 @@ class Operations:
                         Operations.update_system_log("Completed file {}".format(statistical_trace_file))
         Operations.update_system_log('Completed trace generation')
 
+    @staticmethod
+    def read_jobs_iso(trace_id, day, core):
+        # Started reading jobs - for particular day
+        # Operations.update_system_log('Started reading jobs.')
+        jobs = Operations.__get_jobs(trace_id, day, core)
+        # Operations.update_system_log('Completed reading jobs.')
+        return jobs
+
+    # Generates statistical trace based on slack files and trace jobs, one file per simulation
+    @staticmethod
+    def generate_statistical_trace_iso(jobs, trace_id, day, core, slack_set, slack, standard_deviation, set_num):
+        # Generate statistical trace file
+        slacks = Operations.__get_lognormal_slacks(slack_set, slack, standard_deviation, set_num)
+        file_location = Operations.__set_statistical_trace_file_location(core, day, True)
+        statistical_trace_file = Operations.__get_statistical_trace_file_name(trace_id,
+                                                                              day,
+                                                                              slack,
+                                                                              standard_deviation,
+                                                                              core,
+                                                                              set_num)
+        print('Generating file ', statistical_trace_file)
+        #Operations.update_system_log("Generating file {}".format(statistical_trace_file))
+        file = open(file_location + statistical_trace_file, 'w')
+        for job in jobs:
+            release_time = job.get_release_time()
+            processing_time = job.get_processing_time()
+            epsilon = slacks.pop()
+            due_time = math.ceil(release_time + (1 + epsilon) * processing_time)
+            file.write(Operations.__get_csv_details(job, due_time, epsilon))
+        file.close()
+
+        print('Completed file ', statistical_trace_file)
+        #Operations.update_system_log("Completed file {}".format(statistical_trace_file))
+        #Operations.update_system_log('Completed trace generation')
+
     # Provides location of trace files based on simulation run type
     # single=False, when we have enough space and all traces are generated well in advance
     # single=True, when we generate trace for a day, run simulation and then clear it at the end
@@ -100,6 +136,22 @@ class Operations:
 
         return file_path
 
+    @staticmethod
+    def get_machine_settings(trace_id, day, core):
+        machine_start = MACHINE_START[trace_id][core]
+        machine_increment = MACHINE_INCREMENT[trace_id][core][day]
+        machine_end = MACHINE_END[trace_id][core][day]
+
+        return [machine_start, machine_end, machine_increment]
+
+    @staticmethod
+    def get_result_file_name(trace_id, day, core, set_num):
+        file = 'Result' + trace_id + \
+               'L60D' + str(day) + \
+               'C' + str(core) + \
+               'S' + str(set_num) + \
+               ".txt"
+        return file
 
     # LOG FILE METHODS
     # Creates an entry into the main simulation log
@@ -207,6 +259,21 @@ class Operations:
                 shutil.rmtree(os.path.join(RESULT_FOLDER, content))
 
     @staticmethod
+    def clear_all_trace_files():
+        contents = []
+        if os.path.exists(STATISTICAL_TRACE_FOLDER):
+            contents = os.listdir(STATISTICAL_TRACE_FOLDER)
+
+        while len(contents) > 0:
+            content = contents.pop()
+            if os.path.isfile(os.path.join(STATISTICAL_TRACE_FOLDER, content)):
+                os.remove(os.path.join(STATISTICAL_TRACE_FOLDER, content))
+            elif os.path.isdir(os.path.join(STATISTICAL_TRACE_FOLDER, content)):
+                shutil.rmtree(os.path.join(STATISTICAL_TRACE_FOLDER, content))
+
+        os.makedirs(os.path.join(STATISTICAL_TRACE_FOLDER,'runningtrace'))
+
+    @staticmethod
     def __get_trace_file_name(trace_id, day):
         file = RAW[trace_id] + \
                'D' + str(day) + \
@@ -228,7 +295,7 @@ class Operations:
     def __set_statistical_trace_file_location(core, day, single=False):
         file_location = STATISTICAL_TRACE_FOLDER + 'all-traces/c' + str(core) + '/' + 'day' + str(day) + '/'
         if single:
-            file_location = STATISTICAL_TRACE_FOLDER + 'running-trace/'
+            file_location = STATISTICAL_TRACE_FOLDER + 'runningtrace/'
 
         if not os.path.exists(file_location):
             os.makedirs(file_location)

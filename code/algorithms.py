@@ -82,7 +82,7 @@ class Algorithm:
         total_load = self.__accepted_load + self.__rejected_load
         self.__optimal_load = min(total_resources, total_load)
         return ([len(self.__accepted_jobs), len(self.__rejected_jobs),
-                 self.__accepted_load, self.__rejected_load, self.__optimal_load])
+                 self.__accepted_load, self.__rejected_load, self.__optimal_load, self.__execution_time])
 
     # method to sort jobs in ascending order of their release times
     def _sort_jobs_ascending_release_time(self):
