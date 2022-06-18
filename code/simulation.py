@@ -4,6 +4,7 @@ from functions import Operations
 from algorithms import AlgorithmGBalanced, AlgorithmGBestFit, AlgorithmThreshold, AlgorithmGMinIdle
 from settings import SETS, SLACKS, SD
 from settings import STATISTICAL_TRACE_FOLDER, RESULT_FOLDER
+from datetime import datetime
 import copy
 
 
@@ -12,9 +13,15 @@ class Scheduler:
     def __init__(self):
         self.__operations = Operations()
 
-    def run_specific_day(self, day, trace_id, core, slack_set):
+    def run_specific_day(self, day, trace_id, core, slack_set, num):
+        stamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        data = "{} \t Started for day {} for jobs with cores {}.\n".format(stamp, day, core)
+        self.__operations.update_parallel_log(data)
+
         trace_jobs = self.__operations.read_jobs_iso(trace_id, day, core)
-        for num in SETS:
+
+        # for num in SETS:
+        if True:
             result_file = RESULT_FOLDER + self.__operations.get_result_file_name(trace_id, day, core, num)
             with open(result_file, "w") as file:
                 header = "SET; SLACK; SD; MACHINES; DENOMINATOR; "
@@ -93,8 +100,6 @@ class Scheduler:
                             file.write(data)
                         file.close()
 
-
-
     def run_specific_day_limits(self, day, trace_id, core, slack_set):
         trace_jobs = self.__operations.read_jobs_iso(trace_id, day, core)
 
@@ -103,6 +108,7 @@ class Scheduler:
             total_load += job.get_processing_time() * job.get_job_core()
 
         print("Total {} jobs available with load {}".format(len(trace_jobs), total_load))
+
 
         slack = 0.1
         standard_deviation = 0.05
@@ -116,16 +122,27 @@ class Scheduler:
 
         jobs_master = self.__operations.get_jobs(job_file)
 
-        for machine in range(300, 10000, 50):
+        if day == 30 or day == 31:
+            start_m = 4500
+        else:
+            start_m = 800
+
+        for machine in range(start_m, 10000, 50):
             print("Started with day {} with machines {}".format(day, machine))
             jobs = copy.deepcopy(jobs_master)
             machines = self.__operations.get_machines(machine)
 
             greedybalanced = AlgorithmGBalanced(jobs, machines)
-            [accepted_jobs, rejected_jobs, accepted_load, rejected_load, optimal_load] = greedybalanced.execute()
+            [accepted_jobs, rejected_jobs, accepted_load, rejected_load, optimal_load, execution_time] = greedybalanced.execute()
+
+            #if accepted_load == optimal_load:
+            #    with open(RESULT_FOLDER + 'machineupperlimits.txt', 'a') as file:
+            #        file.write("{} : {} : {}\n".format(day, len(jobs_master), machine))
+            #    file.close()
+            #    break
 
             if accepted_load + rejected_load == optimal_load:
-                with open(RESULT_FOLDER + 'machinelimits3.txt', 'a') as file:
+                with open(RESULT_FOLDER + 'machinelowerlimits.txt', 'a') as file:
                     file.write("{} : {} : {}\n".format(day, len(jobs_master), machine))
                 file.close()
                 break

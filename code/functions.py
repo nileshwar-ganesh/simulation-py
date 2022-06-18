@@ -173,6 +173,14 @@ class Operations:
         file.close()
 
     @staticmethod
+    def update_parallel_log(data):
+        file_location = LOG_FOLDER + 'parallellog.txt'
+        file = open(file_location, 'a')
+        stamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        file.write("{} \t {}\n".format(stamp, data))
+        file.close()
+
+    @staticmethod
     def update_time_log(algorithm_id, job_num, machine_num, execution_time, reset=False):
         file_location = LOG_FOLDER + 'timelog.txt'
         if reset:
@@ -337,7 +345,7 @@ class Operations:
             job_core = int(job_data[11])
             job_category = job_data[10]
 
-            if job_core == core and job_category.lower().__eq__('accept'):
+            if job_core <= core and job_category.lower().__eq__('accept'):
                 job_id = job_data[0]
                 processing_time = int(job_data[3])
                 release_time = int(job_data[8])
