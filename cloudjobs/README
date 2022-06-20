@@ -1,0 +1,14 @@
+This folder contains refined traces from google clusters.
+
+We have extracted following data from recorded trace details
+1. start time
+2. halt time
+3. number of sub tasks for each job
+
+and calculated following job properties
+1. total processing time
+2. release time of the job
+3. total number of cores for each job
+
+google2011 contains jobs from cluster data of 2011 over a period of 29 days
+google2019a contains jobs from cluster data of 2019 over a period of 31 days
