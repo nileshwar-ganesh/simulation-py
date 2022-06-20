@@ -5,7 +5,9 @@ from algorithms import AlgorithmGBalanced, AlgorithmGBestFit, AlgorithmThreshold
 from settings import SETS, SLACKS, SD
 from settings import STATISTICAL_TRACE_FOLDER, RESULT_FOLDER
 from datetime import datetime
+import math
 import copy
+
 
 
 class Scheduler:
@@ -89,7 +91,7 @@ class Scheduler:
                             greedy_minidle = AlgorithmGMinIdle(jobs, machines)
                             results_gmi = greedy_minidle.execute()
                             data += "{}; {}; {}; {}; {}; {}; ".format(results_gmi[0], results_gmi[1], results_gmi[2],
-                                                                     results_gmi[3], results_gmi[4], results_gmi[5])
+                                                                      results_gmi[3], results_gmi[4], results_gmi[5])
                             optimal_load = max(optimal_load, results_gmi[4])
 
                         data += "{}; ".format(optimal_load)
@@ -100,60 +102,73 @@ class Scheduler:
                             file.write(data)
                         file.close()
 
-    def run_specific_day_limits(self, day, trace_id, core, slack_set):
+    def run_specific_day_limits(self, day, trace_id, core, slack_set, num):
+        #conditions
+        details = True
+        lowerlimits = False
+        upperLimits = False
+        file_name = "lowerlimitsc{}.txt".format(core)
+        result_file = RESULT_FOLDER + file_name
+
         trace_jobs = self.__operations.read_jobs_iso(trace_id, day, core)
 
         total_load = 0
         for job in trace_jobs:
             total_load += job.get_processing_time() * job.get_job_core()
 
-        print("Total {} jobs available with load {}".format(len(trace_jobs), total_load))
+        # print("{} : {} : {}".format(day, len(trace_jobs), total_load))
+        machines_n = [n for n in range(800, 5000, 50)]
+        # print(machines_n)
 
+        print("Started for day {}.".format(day))
+        if details:
+            slack = 0.1
+            standard_deviation = 0.05
 
-        slack = 0.1
-        standard_deviation = 0.05
-        num = 1
+            self.__operations.generate_statistical_trace_iso(trace_jobs, trace_id, day, core,
+                                                             slack_set, slack, standard_deviation, num)
 
-        self.__operations.generate_statistical_trace_iso(trace_jobs, trace_id, day, core,
-                                                         slack_set, slack, standard_deviation, num)
+            job_file = self.__operations.get_statistical_trace_file_location(trace_id, day, slack, standard_deviation,
+                                                                             core, num, True)
 
-        job_file = self.__operations.get_statistical_trace_file_location(trace_id, day, slack, standard_deviation,
-                                                                         core, num, True)
+            jobs_master = self.__operations.get_jobs(job_file)
 
-        jobs_master = self.__operations.get_jobs(job_file)
+            start_idx = 0
+            end_idx = len(machines_n) - 1
 
-        if day == 30 or day == 31:
-            start_m = 4500
-        else:
-            start_m = 800
+            counter = 0
 
-        for machine in range(start_m, 10000, 50):
-            print("Started with day {} with machines {}".format(day, machine))
-            jobs = copy.deepcopy(jobs_master)
-            machines = self.__operations.get_machines(machine)
+            while start_idx != end_idx:
+                mid_idx = math.ceil((start_idx + end_idx) / 2)
+                machine = machines_n[int(mid_idx)]
 
-            greedybalanced = AlgorithmGBalanced(jobs, machines)
-            [accepted_jobs, rejected_jobs, accepted_load, rejected_load, optimal_load, execution_time] = greedybalanced.execute()
+                #print("Started with day {} with machines {}".format(day, machine))
+                jobs = copy.deepcopy(jobs_master)
+                machines = self.__operations.get_machines(machine)
 
-            #if accepted_load == optimal_load:
-            #    with open(RESULT_FOLDER + 'machineupperlimits.txt', 'a') as file:
-            #        file.write("{} : {} : {}\n".format(day, len(jobs_master), machine))
-            #    file.close()
-            #    break
+                greedybalanced = AlgorithmGBalanced(jobs, machines)
+                [accepted_jobs, rejected_jobs, accepted_load,
+                 rejected_load, optimal_load, execution_time] = greedybalanced.execute()
 
-            if accepted_load + rejected_load == optimal_load:
-                with open(RESULT_FOLDER + 'machinelowerlimits.txt', 'a') as file:
-                    file.write("{} : {} : {}\n".format(day, len(jobs_master), machine))
-                file.close()
-                break
+                #print("{} machines {} accepted + rejected {} optimal".format(machines_n[mid_idx],
+                #                                                             accepted_load + rejected_load,
+                #                                                             optimal_load))
 
+                #print("start {} end {}".format(start_idx, end_idx))
 
+                if accepted_load + rejected_load == optimal_load:
+                    end_idx = mid_idx
+                elif accepted_load + rejected_load > optimal_load:
+                    start_idx = mid_idx
 
+                if end_idx == start_idx + 1:
+                    counter += 1
 
+                if counter == 2:
+                    break
 
-
-
-
-
-
-
+            with open(result_file, "a") as file:
+                data = "{} : {} : {}\n".format(day, len(jobs_master), machines_n[end_idx])
+                file.write(data)
+                print("Completed for day {}.".format(day))
+            file.close()

@@ -15,15 +15,18 @@ from settings import MACHINE_END
 
 
 def _run_simulation():
-    set_num = 10
+    set_num = 1
 
     parameters = []
     for day in range(1, 32):
-        parameters.append((day, '2019A', 30, 'MA', set_num))
+        if day >= 1:
+            parameters.append((day, '2019A', 30, 'MA', set_num))
 
     scheduler = Scheduler()
     pool = Pool()
-    pool.starmap(scheduler.run_specific_day, parameters)
+    pool.starmap(scheduler.run_specific_day_limits, parameters)
+    print("COMPLETED...")
+
 
 if __name__ == '__main__':
     operations = Operations()
