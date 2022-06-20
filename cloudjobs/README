@@ -1,4 +1,15 @@
-This folder contains refined traces from google clusters.
+This folder should contains refined traces from google clusters.
+The data is available at https://github.com/nileshwar-ganesh/cloud-jobs
+
+google2011 contains jobs from cluster data of 2011 over a period of 29 days
+google2019a contains jobs from cluster data of 2019 over a period of 31 days
+
+The folder structure should be
+~/simulation-py/cloudjobs/google2011
+~/simulation-py/cloudjobs/google2019a
+
+----------------------------------------------------------------------------
+Description about how trace files are generated:
 
 We have extracted following data from recorded trace details
 1. start time
@@ -9,6 +20,3 @@ and calculated following job properties
 1. total processing time
 2. release time of the job
 3. total number of cores for each job
-
-google2011 contains jobs from cluster data of 2011 over a period of 29 days
-google2019a contains jobs from cluster data of 2019 over a period of 31 days
