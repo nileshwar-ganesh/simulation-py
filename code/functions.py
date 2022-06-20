@@ -173,11 +173,12 @@ class Operations:
         file.close()
 
     @staticmethod
-    def update_parallel_log(data):
+    def update_parallel_log(day, core, action):
         file_location = LOG_FOLDER + 'parallellog.txt'
         file = open(file_location, 'a')
         stamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        file.write("{} \t {}\n".format(stamp, data))
+        data = "{} \t {} for day {} for jobs with cores {}.\n".format(action.upper(), stamp, day, core)
+        file.write(data)
         file.close()
 
     @staticmethod
@@ -249,7 +250,8 @@ class Operations:
         while len(contents) > 0:
             content = contents.pop()
             if os.path.isfile(os.path.join(LOG_FOLDER, content)):
-                os.remove(os.path.join(LOG_FOLDER, content))
+                if content != 'README':
+                    os.remove(os.path.join(LOG_FOLDER, content))
             elif os.path.isdir(os.path.join(LOG_FOLDER, content)):
                 shutil.rmtree(os.path.join(LOG_FOLDER, content))
 
@@ -262,7 +264,8 @@ class Operations:
         while len(contents) > 0:
             content = contents.pop()
             if os.path.isfile(os.path.join(RESULT_FOLDER, content)):
-                os.remove(os.path.join(RESULT_FOLDER, content))
+                if content != 'README':
+                    os.remove(os.path.join(RESULT_FOLDER, content))
             elif os.path.isdir(os.path.join(RESULT_FOLDER, content)):
                 shutil.rmtree(os.path.join(RESULT_FOLDER, content))
 
@@ -275,7 +278,8 @@ class Operations:
         while len(contents) > 0:
             content = contents.pop()
             if os.path.isfile(os.path.join(STATISTICAL_TRACE_FOLDER, content)):
-                os.remove(os.path.join(STATISTICAL_TRACE_FOLDER, content))
+                if content != 'README':
+                    os.remove(os.path.join(STATISTICAL_TRACE_FOLDER, content))
             elif os.path.isdir(os.path.join(STATISTICAL_TRACE_FOLDER, content)):
                 shutil.rmtree(os.path.join(STATISTICAL_TRACE_FOLDER, content))
 

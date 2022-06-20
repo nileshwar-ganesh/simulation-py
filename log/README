@@ -1,0 +1,5 @@
+This folder contains various logs recorded during the execution of the simulation
+
+For e.g.
+File simulationlog.txt records the abstract details of simulation for each algorithms
+File parallellog.txt records the start of simulations, which are being executed in parallel

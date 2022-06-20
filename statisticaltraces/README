@@ -1,0 +1,3 @@
+This folder will be the location of generated statistical workload traces.
+
+For the normal functioning of the simulation, the code is designed in such a way that the generated trace file is deleted as soon as the simulation completes.

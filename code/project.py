@@ -19,8 +19,8 @@ def _run_simulation():
 
     parameters = []
     for day in range(1, 32):
-        if day >= 1:
-            parameters.append((day, '2019A', 30, 'MA', set_num))
+        if day == 1 or day == 2:
+            parameters.append((day, '2019A', 1, 'MA', set_num))
 
     scheduler = Scheduler()
     pool = Pool()
@@ -34,4 +34,4 @@ if __name__ == '__main__':
     operations.clear_all_results()
     operations.clear_all_logs()
 
-    #_run_simulation()
+    # _run_simulation()

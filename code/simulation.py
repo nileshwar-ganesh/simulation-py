@@ -4,6 +4,7 @@ from functions import Operations
 from algorithms import AlgorithmGBalanced, AlgorithmGBestFit, AlgorithmThreshold, AlgorithmGMinIdle
 from settings import SETS, SLACKS, SD
 from settings import STATISTICAL_TRACE_FOLDER, RESULT_FOLDER
+from settings import MACHINE_START
 from datetime import datetime
 import math
 import copy
@@ -16,9 +17,8 @@ class Scheduler:
         self.__operations = Operations()
 
     def run_specific_day(self, day, trace_id, core, slack_set, num):
-        stamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        data = "{} \t Started for day {} for jobs with cores {}.\n".format(stamp, day, core)
-        self.__operations.update_parallel_log(data)
+
+        self.__operations.update_parallel_log(day, core, 'start')
 
         trace_jobs = self.__operations.read_jobs_iso(trace_id, day, core)
 
@@ -102,23 +102,32 @@ class Scheduler:
                             file.write(data)
                         file.close()
 
+        self.__operations.update_parallel_log(day, core, 'end')
+
     def run_specific_day_limits(self, day, trace_id, core, slack_set, num):
-        #conditions
         details = True
-        lowerlimits = False
-        upperLimits = False
-        file_name = "lowerlimitsc{}.txt".format(core)
+        file_name = "minimum_machines_c{}.txt".format(core)
         result_file = RESULT_FOLDER + file_name
+
+        machines_n = []
+        if core == 1:
+            machine_start = MACHINE_START[trace_id][core]
+            machine_end = machine_start * 100
+            machines_n = [n for n in range(machine_start, machine_end, 50)]
+        elif core == 30:
+            machine_start = MACHINE_START[trace_id][core]
+            machine_end = machine_start * 100
+            machines_n = [n for n in range(machine_start, machine_end, 50)]
+        elif core == 120:
+            machine_start = MACHINE_START[trace_id][core]
+            machine_end = machine_start * 100
+            machines_n = [n for n in range(machine_start, machine_end, 50)]
 
         trace_jobs = self.__operations.read_jobs_iso(trace_id, day, core)
 
         total_load = 0
         for job in trace_jobs:
             total_load += job.get_processing_time() * job.get_job_core()
-
-        # print("{} : {} : {}".format(day, len(trace_jobs), total_load))
-        machines_n = [n for n in range(800, 5000, 50)]
-        # print(machines_n)
 
         print("Started for day {}.".format(day))
         if details:
@@ -142,19 +151,12 @@ class Scheduler:
                 mid_idx = math.ceil((start_idx + end_idx) / 2)
                 machine = machines_n[int(mid_idx)]
 
-                #print("Started with day {} with machines {}".format(day, machine))
                 jobs = copy.deepcopy(jobs_master)
                 machines = self.__operations.get_machines(machine)
 
                 greedybalanced = AlgorithmGBalanced(jobs, machines)
                 [accepted_jobs, rejected_jobs, accepted_load,
                  rejected_load, optimal_load, execution_time] = greedybalanced.execute()
-
-                #print("{} machines {} accepted + rejected {} optimal".format(machines_n[mid_idx],
-                #                                                             accepted_load + rejected_load,
-                #                                                             optimal_load))
-
-                #print("start {} end {}".format(start_idx, end_idx))
 
                 if accepted_load + rejected_load == optimal_load:
                     end_idx = mid_idx
