@@ -16,15 +16,14 @@ class Scheduler:
     def __init__(self):
         self.__operations = Operations()
 
-    def run_specific_day(self, day, trace_id, core, slack_set, num):
-
+    def run_specific_day(self, day, trace_id, core, slack_set, num, slacks=SLACKS, sd=SD):
         self.__operations.update_parallel_log(day, core, 'start')
 
         trace_jobs = self.__operations.read_jobs_iso(trace_id, day, core)
 
         # for num in SETS:
         if True:
-            result_file = RESULT_FOLDER + self.__operations.get_result_file_name(trace_id, day, core, num)
+            result_file = RESULT_FOLDER + self.__operations.get_result_file_name(trace_id, day, core, num, slacks, sd)
             with open(result_file, "w") as file:
                 header = "SET; SLACK; SD; MACHINES; DENOMINATOR; "
                 header += "ACC JOBS GB; REJ JOBS GB; ACC LOAD GB; REJ LOAD GB; TOT LOAD GB; RUN TIME GB; "
@@ -38,8 +37,8 @@ class Scheduler:
                 file.write(header)
             file.close()
 
-            for slack in SLACKS:
-                for value in SD:
+            for slack in slacks:
+                for value in sd:
 
                     standard_deviation = round(slack/value, 3)
                     self.__operations.generate_statistical_trace_iso(trace_jobs, trace_id, day, core,
@@ -85,7 +84,7 @@ class Scheduler:
                                                                       results_th[3], results_th[4], results_th[5])
                             optimal_load = max(optimal_load, results_th[4])
 
-                        if core == 30:
+                        if core == 30 or core == 120:
                             jobs = copy.deepcopy(jobs_master)
                             machines = copy.deepcopy(machines_master)
                             greedy_minidle = AlgorithmGMinIdle(jobs, machines)
@@ -104,7 +103,7 @@ class Scheduler:
 
         self.__operations.update_parallel_log(day, core, 'end')
 
-    def run_specific_day_limits(self, day, trace_id, core, slack_set, num):
+    def run_specific_day_machine_limits(self, day, trace_id, core, slack_set, num):
         details = True
         file_name = "minimum_machines_c{}.txt".format(core)
         result_file = RESULT_FOLDER + file_name

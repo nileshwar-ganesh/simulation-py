@@ -145,10 +145,12 @@ class Operations:
         return [machine_start, machine_end, machine_increment]
 
     @staticmethod
-    def get_result_file_name(trace_id, day, core, set_num):
+    def get_result_file_name(trace_id, day, core, set_num, slacks, sd):
         file = 'Result' + trace_id + \
                'L60D' + str(day) + \
                'C' + str(core) + \
+               'SL' + str(slacks[0]) + 't' + str(slacks[-1]) + \
+               'SD' + str(sd[0]) + 't' + str(sd[-1]) + \
                'S' + str(set_num) + \
                ".txt"
         return file
