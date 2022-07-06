@@ -132,7 +132,7 @@ class Operations:
         file_path = file_directory + file_name
         if not os.path.exists(file_path):
             print('File does not exist!')
-            sys.exit()
+            return None
 
         return file_path
 

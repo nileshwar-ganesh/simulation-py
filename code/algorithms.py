@@ -3,6 +3,7 @@ import sys
 import time
 import math
 import numpy as np
+import copy as cp
 from functions import Operations
 from settings import RESULT_FOLDER
 from schedulingelements import Job, Container, Machine
@@ -26,8 +27,12 @@ class Algorithm:
         # time taken to completely execute n jobs on m machines
         self.__execution_time = None
 
+        # container id variable
+        self.__container_id = 1
         # list of containers which are deployed. each container holds a single job
         self.__containers = []
+        # list of open containers - used based on type of algorithm
+        self.__open_containers = []
         # list of accepted and rejected jobs
         self.__accepted_jobs = []
         self.__rejected_jobs = []
@@ -52,8 +57,14 @@ class Algorithm:
     def get_machine_num(self):
         return self.__machine_num
 
+    def get_accepted_jobs(self):
+        return self.__accepted_jobs
+
     def get_rejected_jobs(self):
         return self.__rejected_jobs
+
+    def get_open_containers(self):
+        return self.__open_containers
 
     # Update methods to modify private class variables
     def update_machine(self, core, container, completion_time):
@@ -61,6 +72,12 @@ class Algorithm:
 
     def update_container_list(self, container):
         self.__containers.append(container)
+
+    def update_open_container_list_add(self, container):
+        self.__open_containers.append(container)
+
+    def update_open_container_list_pop(self, index):
+        self.__open_containers.pop(index)
 
     def update_accepted(self, job):
         self.__accepted_jobs.append(job)
@@ -73,10 +90,192 @@ class Algorithm:
     def update_execution_time(self, time):
         self.__execution_time = time
 
+    def allocate_job_to_core(self, job, start_core):
+        # start time on this core
+        start_time = self._get_start_time(job, start_core)
+        # completion time on this core
+        completion_time = self._get_completion_time(job, start_core)
+        for core in range(start_core, start_core + job.get_job_core()):
+            # storing initial machine available time for idle containers
+            machine_available_time = self._get_machine_avail_time(core)
+            # get machine id
+            machine_id = self.get_machine_list()[core].get_machine_id()
+            # generating container and assigning job to this container
+            container = Container(self.__container_id)
+            container.assign(job, start_time, completion_time, machine_id)
+            # updating machine with this container
+            self.update_machine(core, container, completion_time)
+            # updating master container list
+            self.update_container_list(container)
+            # incrementing container number by 1
+            self.__container_id += 1
+            # only if the current job creates an idle slot on this machine, do
+            if start_time - machine_available_time > 0:
+                container = Container(self.__container_id)
+                container.reserve(machine_available_time, start_time, start_time - machine_available_time, machine_id)
+                self.update_open_container_list_add(container)
+                self.__container_id += 1
+
+        # updating job with start time and completion time
+        job.update(start_time, completion_time)
+        # updating the accepted jobs list
+        self.update_accepted(job)
+
+    def check_and_allocate_backfill(self, job):
+        # if there are no open containers yet, simply return false
+        if len(self.__open_containers) <= 0:
+            print('No open containers yet.')
+            return False
+        # get the job properties
+        job_release_time = job.get_release_time()
+        job_due_time = job.get_due_time()
+        job_processing_time = job.get_processing_time()
+        job_core = job.get_job_core()
+
+        # create a binary matrix with eligible open containers
+        container_bin_matrix = []
+        # for every container in the list of open containers, do
+        for container in self.__open_containers:
+            # time at which container becomes available
+            container_start_time = container.get_start_time()
+            # time after which the container is no longer available
+            container_end_time = container.get_end_time()
+            # usable length within the container w.r.t. our job
+            usable_length = min(job_due_time, container_end_time) - max(job_release_time, container_start_time)
+            # if we have enough space inside the container, do
+            if usable_length >= job_processing_time:
+                # first column is a reference to the container
+                container_id = np.array([container.get_id()])
+                # each row is divided into three blocks
+                # start block is vacant area from job release till container start, filled with zeros
+                start_block = np.zeros(max(job_release_time, container_start_time) - job_release_time)
+                # start block is vacant area from container end till job due, filled with zeros
+                end_block = np.zeros(job_due_time - min(job_due_time, container_end_time))
+                # mid block is the usable length of the container, filled with ones
+                mid_block = np.ones(usable_length)
+                # the appended row for the particular container
+                container_bin_matrix.append(np.hstack((container_id, start_block, mid_block, end_block)))
+
+        # if not even one container exists, where enough job length is available, then return false
+        if len(container_bin_matrix) <= 0:
+            print('Not even one open container exists, which has free space equivalent to the job length.')
+            return False
+        # this matrix sums up the rows vertically. if this value is larger than or equal to the job core requirement,
+        # then we know that there are enough free containers at this point which meet the core requirement
+        container_overlap_matrix = np.sum(container_bin_matrix, axis=0)
+
+        # now we need to check whether there are enough overlapping containers to schedule our job
+        start_point = None
+        job_length = 0
+        for position, value in enumerate(container_overlap_matrix):
+            # we ignore the container id at this point
+            if position == 0:
+                continue
+            # if we have enough containers, we take the current point as start point
+            if value >= job_core:
+                if start_point is None:
+                    start_point = position
+                job_length += 1
+            else:
+                # before covering the job length, if number drops - then we need to look for a new point
+                start_point = None
+                job_length = 0
+            # if we found continuous job length in containers, then we are done
+            if job_length == job_processing_time:
+                break
+
+        if start_point is None or job_length < job_processing_time:
+            print('Not enough containers to meet the core requirement of the job.')
+            return False
+
+        # variable to keep count of how many containers we already assigned
+        assigned_containers = 0
+        # variable hold the container ids in the current order of open containers
+        container_ids = np.array([container.get_id() for container in self.__open_containers])
+        # variable to hold containers, to which job has been allocated
+        allocated_containers = []
+        # variable holds new open containers, which might have been created because of job allocation
+        open_containers_new = []
+        # reference to original open container list, which need to be deleted because of new allocation
+        delete_ids = []
+
+        # go through each row of container binary matrix and allocate containers one by one
+        for row in container_bin_matrix:
+            # if enough job length is available in this container, then allocate job
+            if row[start_point] == 1 and row[start_point + job_processing_time - 1] == 1:
+                # get the container id
+                container_id = row[0]
+                # add container id to delete list
+                delete_ids.append(container_id)
+
+                # find the location of the container in the original list
+                index_array = np.where(container_ids == container_id)
+                index = index_array[0][0]
+                # start and end times of the job, if assigned to this container
+                job_start_time = job_release_time + start_point - 1
+                job_end_time = job_start_time + job_processing_time
+                machine_id = self.__open_containers[index].get_machine()
+                # create a new container and assign to allocated list
+                container = Container(self.__container_id)
+                container.assign(job, job_start_time, job_end_time, machine_id)
+                allocated_containers.append(container)
+                self.__container_id += 1
+
+                # if container is not fully utilized, there will still be idle slots
+                # creating new open container, if idle slot precedes the allocated slot
+                if job_start_time > self.__open_containers[index].get_start_time():
+                    container = Container(self.__container_id)
+                    # the container lies between earlier container start time and actual job start time
+                    container.reserve(self.__open_containers[index].get_start_time(),
+                                      job_start_time,
+                                      job_start_time - self.__open_containers[index].get_start_time(),
+                                      self.__open_containers[index].get_machine())
+                    open_containers_new.append(container)
+                    self.__container_id += 1
+
+                # creating new open container, if idle slot follows the allocated slot
+                if job_end_time < self.__open_containers[index].get_end_time():
+                    container = Container(self.__container_id)
+                    # the container lies between actual job end time and earlier container end time
+                    container.reserve(job_end_time,
+                                      self.__open_containers[index].get_end_time(),
+                                      self.__open_containers[index].get_end_time() - job_end_time,
+                                      self.__open_containers[index].get_machine())
+                    open_containers_new.append(container)
+                    self.__container_id += 1
+
+                assigned_containers += 1
+
+                # if enough containers are assigned for the job, then exit
+                if assigned_containers == job_core:
+                    job.update(job_start_time, job_end_time)
+                    self.__accepted_jobs.append(job)
+                    break
+
+        _, indices, _ = np.intersect1d(container_ids, delete_ids, return_indices=True)
+        indices = np.sort(indices)
+        while len(indices) > 0:
+            index = indices[-1]
+            self.__open_containers.pop(index)
+            indices = np.delete(indices, -1)
+
+        for container in open_containers_new:
+            self.__open_containers.append(cp.deepcopy(container))
+
+        machine_ids = np.array([machine.get_machine_id() for machine in self.__machines])
+        while len(allocated_containers) > 0:
+            container = allocated_containers.pop(0)
+            machine_id = container.get_machine()
+            index_array = np.where(machine_ids == machine_id)
+            index = index_array[0][0]
+            self.__machines[index].attach(container)
+
+        return True
+
     # Returns result in a list form
     # n_accepted jobs, n_rejected_jobs, accepted load, rejected load, optimal load
     def _results(self):
-        self.__machines.sort(key=lambda m:m.get_available_time(), reverse=True)
+        self.__machines.sort(key=lambda m: m.get_available_time(), reverse=True)
         makespan = self.__machines[0].get_available_time()
         total_resources = len(self.__machines) * makespan
         total_load = self.__accepted_load + self.__rejected_load
@@ -86,11 +285,11 @@ class Algorithm:
 
     # method to sort jobs in ascending order of their release times
     def _sort_jobs_ascending_release_time(self):
-        self.__jobs.sort(key=lambda j:j.get_release_time())
+        self.__jobs.sort(key=lambda j: j.get_release_time())
 
     # method to sort machines so that most loaded stays on top and least loaded at the bottom
     def _sort_machines_descending_avail_time(self):
-        self.__machines.sort(key=lambda m:m.get_available_time(), reverse=True)
+        self.__machines.sort(key=lambda m: m.get_available_time(), reverse=True)
 
     # method to return start time of a particular job on a particular machine
     def _get_start_time(self, job, core):
@@ -99,6 +298,11 @@ class Algorithm:
 
         start_time = max(machine_avail_time, release_time)
         return start_time
+
+    # this method returns machine available time
+    def _get_machine_avail_time(self, core):
+        machine_avail_time = self.__machines[core].get_available_time()
+        return machine_avail_time
 
     # method to return completion time of a job on a particular machine
     def _get_completion_time(self, job, core):
@@ -141,6 +345,8 @@ class Algorithm:
             # upon both limits converging, we return the machine index
             return m_lower
 
+    # method to update
+
     # method which updates individual simulation logs for future reference
     def _update_logs(self):
         if not self.__trial_mode:
@@ -163,45 +369,63 @@ class AlgorithmGBalanced(Algorithm):
         super().__init__('greedybalanced', jobs, machines)
 
     def execute(self, trial=False):
-        container_id = 1
+        # start time point reference
         simulation_start_time = time.time()
+        # sort all jobs in ascending order
         super()._sort_jobs_ascending_release_time()
+        # for every job in the list, do
         while len(super().get_job_list()) > 0:
+            # get the first job in the list
             job = super().get_job_fifo()
-
-            # Sort machines based on reverse order of remaining load
+            # sort machines based on reverse order of remaining load
             super()._sort_machines_descending_avail_time()
-
-            # Check whether the job can be legally completed
-            # Considering multi-core jobs, last core for job c = m - job_core
-            start_core = super().get_machine_num() - job.get_job_core()
-            if start_core < 0:
-                super().update_rejected(job)
+            # check whether the job has enough cores to complete
+            # considering multi-core jobs, last core for job c = m - job_core
+            legal_completion_status = self.__check_legal_completion(job)
+            if not legal_completion_status:
                 continue
-
-            start_time = super()._get_start_time(job, start_core)
-            completion_time = super()._get_completion_time(job, start_core)
-            if completion_time <= job.get_due_time():
-                for core in range(start_core, super().get_machine_num()):
-                    container = Container(container_id)
-                    container.assign(job, start_time, completion_time,
-                                     super().get_machine_list()[core].get_machine_id())
-
-                    super().update_machine(core, container, completion_time)
-                    super().update_container_list(container)
-                    container_id += 1
-
-                job.update(start_time, completion_time)
-                super().update_accepted(job)
-            else:
-                super().update_rejected(job)
+            # check whether the job can be legally completed before due time on available cores
+            # greedy acceptance policy
+            acceptance_status = self.__check_acceptance_status(job)
+            if not acceptance_status:
+                continue
+            # allocate job based on greedy balanced allocation policy
+            self.__allocate_greedy_balanced(job)
+        # end time point reference
         simulation_end_time = time.time()
         execution_time = round(simulation_end_time - simulation_start_time, 4)
         super().update_execution_time(execution_time)
-
+        # updating the run time logs
         super()._update_logs()
+        # returning the result of the simulation
         return super()._results()
 
+    def __check_legal_completion(self, job):
+        # if a job has more cores than the one available in the simulation set-up, it can never be processed
+        # hence the job is rejected
+        start_core = super().get_machine_num() - job.get_job_core()
+        if start_core < 0:
+            super().update_rejected(job)
+            return False
+        else:
+            return True
+
+    def __check_acceptance_status(self, job):
+        # if a job with 'c' cores can be completed on/before its due time on 'c' least loaded cores,
+        # then it can be accepted. else, it is rejected
+        start_core = super().get_machine_num() - job.get_job_core()
+        completion_time = super()._get_completion_time(job, start_core)
+        if completion_time <= job.get_due_time():
+            return True
+        else:
+            super().update_rejected(job)
+            return False
+
+    def __allocate_greedy_balanced(self, job):
+        # getting starting core of the job
+        start_core = super().get_machine_num() - job.get_job_core()
+        # allocate job to machine using super method
+        super().allocate_job_to_core(job, start_core)
 
 class AlgorithmGBestFit(Algorithm):
     """
@@ -215,47 +439,63 @@ class AlgorithmGBestFit(Algorithm):
         super().__init__('greedybestfit', jobs, machines)
 
     def execute(self, trial=False):
-        container_id = 1
+        # start time point reference
         simulation_start_time = time.time()
+        # sort all jobs in ascending order
         super()._sort_jobs_ascending_release_time()
+        # for every job in the list, do
         while len(super().get_job_list()) > 0:
+            # get the first job in the list
             job = super().get_job_fifo()
-
-            # Sort machines based on reverse order of remaining load
+            # sort machines based on reverse order of remaining load
             super()._sort_machines_descending_avail_time()
-
-            # Check whether the job can be legally completed
-            # Considering multi-core jobs, last core for job c = m - job_core
-            start_core = super().get_machine_num() - job.get_job_core()
-            if start_core < 0:
-                super().update_rejected(job)
+            # check whether the job has enough cores to complete
+            # considering multi-core jobs, last core for job c = m - job_core
+            legal_completion_status = self.__check_legal_completion(job)
+            if not legal_completion_status:
                 continue
-
-            start_time = super()._get_start_time(job, start_core)
-            completion_time = super()._get_completion_time(job, start_core)
-            if completion_time <= job.get_due_time():
-                start_core = super()._search_loaded_machine(job)
-                start_time = super()._get_start_time(job, start_core)
-                completion_time = super()._get_completion_time(job, start_core)
-                for core in range(start_core, start_core + job.get_job_core()):
-                    container = Container(container_id)
-                    container.assign(job, start_time, completion_time,
-                                     super().get_machine_list()[core].get_machine_id())
-                    super().update_machine(core, container, completion_time)
-                    super().update_container_list(container)
-                    container_id += 1
-
-                job.update(start_time, completion_time)
-                super().update_accepted(job)
-            else:
-                super().update_rejected(job)
-
+            # check whether the job can be legally completed before due time on available cores
+            # greedy acceptance policy
+            acceptance_status = self.__check_acceptance_status(job)
+            if not acceptance_status:
+                continue
+            # allocate job based on greedy balanced allocation policy
+            self.__allocate_greedy_bestfit(job)
+        # end time point reference
         simulation_end_time = time.time()
         execution_time = round(simulation_end_time - simulation_start_time, 4)
         super().update_execution_time(execution_time)
-
+        # updating the run time logs
         super()._update_logs()
+        # returning the result of the simulation
         return super()._results()
+
+    def __check_legal_completion(self, job):
+        # if a job has more cores than the one available in the simulation set-up, it can never be processed
+        # hence the job is rejected
+        start_core = super().get_machine_num() - job.get_job_core()
+        if start_core < 0:
+            super().update_rejected(job)
+            return False
+        else:
+            return True
+
+    def __check_acceptance_status(self, job):
+        # if a job with 'c' cores can be completed on/before its due time on 'c' least loaded cores,
+        # then it can be accepted. else, it is rejected
+        start_core = super().get_machine_num() - job.get_job_core()
+        completion_time = super()._get_completion_time(job, start_core)
+        if completion_time <= job.get_due_time():
+            return True
+        else:
+            super().update_rejected(job)
+            return False
+
+    def __allocate_greedy_bestfit(self, job):
+        # getting starting core of the job
+        start_core = super()._search_loaded_machine(job)
+        # allocate job to machine using super method
+        super().allocate_job_to_core(job, start_core)
 
 
 class AlgorithmThreshold(Algorithm):
@@ -274,48 +514,42 @@ class AlgorithmThreshold(Algorithm):
         self.__epsilon = epsilon
 
     def execute(self):
-        container_id = 1
+        # start time point reference
         simulation_start_time = time.time()
+        # sort all jobs in ascending order
         super()._sort_jobs_ascending_release_time()
+        # calculate f values for the machine system
         f_values = self.__calculate_f_values_epsilon()
-
-        n = 1
+        # for every job in the list, do
         while len(super().get_job_list()) > 0:
+            # get the first job in the list
             job = super().get_job_fifo()
-            n += 1
-            deadline_threshold = self.__calculate_deadline_threshold(f_values, job)
-
-            if job.get_due_time() < deadline_threshold:
-                super().update_rejected(job)
-            else:
-                start_core = super().get_machine_num() - job.get_job_core()
-                if start_core < 0:
-                    super().update_rejected(job)
-                    continue
-
-                completion_time = super()._get_completion_time(job, start_core)
-                if completion_time <= job.get_due_time():
-                    start_core = super()._search_loaded_machine(job)
-                    start_time = super()._get_start_time(job, start_core)
-                    completion_time = super()._get_completion_time(job, start_core)
-                    for core in range(start_core, start_core + job.get_job_core()):
-                        container = Container(container_id)
-                        container.assign(job, start_time, completion_time,
-                                         super().get_machine_list()[core].get_machine_id())
-                        super().update_machine(core, container, completion_time)
-                        super().update_container_list(container)
-                        container_id += 1
-
-                    job.update(start_time, completion_time)
-                    super().update_accepted(job)
-                else:
-                    super().update_rejected(job)
-
+            # sort machines based on reverse order of remaining load
+            super()._sort_machines_descending_avail_time()
+            # check whether the job has enough cores to complete
+            # considering multi-core jobs, last core for job c = m - job_core
+            legal_completion_status = self.__check_legal_completion(job)
+            if not legal_completion_status:
+                continue
+            # check whether the job can be legally completed before due time on available cores
+            # greedy acceptance policy
+            deadline_threshold_acceptance_status = self.__check_deadline_threshold_acceptance_status(f_values, job)
+            if not deadline_threshold_acceptance_status:
+                continue
+            # check whether the job can be legally completed before due time on available cores
+            # greedy acceptance policy
+            acceptance_status = self.__check_acceptance_status(job)
+            if not acceptance_status:
+                continue
+            # allocate job based on greedy balanced allocation policy
+            self.__allocate_greedy_bestfit(job)
+        # end time point reference
         simulation_end_time = time.time()
         execution_time = round(simulation_end_time - simulation_start_time, 4)
         super().update_execution_time(execution_time)
-
+        # updating the run time logs
         super()._update_logs()
+        # returning the result of the simulation
         return super()._results()
 
     def __calculate_f_value_limits(self):
@@ -340,7 +574,6 @@ class AlgorithmThreshold(Algorithm):
         f_eps_m_k_limits[machine_num - 1, 0] = 2.0
         f_eps_m_k_limits[machine_num - 1, 1] = 5.0
         # This function returns the f_value matrix
-
         return f_eps_m_k_limits
 
     def __calculate_eps_value(self, k, f_value):
@@ -403,7 +636,7 @@ class AlgorithmThreshold(Algorithm):
         # This function calculates the maximum deadline threshold
         # First sort the machines in descending order
         release_time = job.get_release_time()
-        super()._sort_machines_descending_avail_time()
+        # super()._sort_machines_descending_avail_time()
         # Calculate deadline threshold of individual machines
         deadline_threshold_m = []
         for m in range(0, super().get_machine_num()):
@@ -411,6 +644,43 @@ class AlgorithmThreshold(Algorithm):
             deadline_threshold_m.append(release_time + load_m * f_values[m + 1])
         # Return the maximum value
         return max(deadline_threshold_m)
+
+    def __check_legal_completion(self, job):
+        # if a job has more cores than the one available in the simulation set-up, it can never be processed
+        # hence the job is rejected
+        start_core = super().get_machine_num() - job.get_job_core()
+        if start_core < 0:
+            super().update_rejected(job)
+            return False
+        else:
+            return True
+
+    def __check_deadline_threshold_acceptance_status(self, f_values, job):
+        # if due time is less than deadline threshold, reject the job
+        # else, accept the job
+        deadline_threshold = self.__calculate_deadline_threshold(f_values, job)
+        if job.get_due_time() < deadline_threshold:
+            super().update_rejected(job)
+            return False
+        else:
+            return True
+
+    def __check_acceptance_status(self, job):
+        # if a job with 'c' cores can be completed on/before its due time on 'c' least loaded cores,
+        # then it can be accepted. else, it is rejected
+        start_core = super().get_machine_num() - job.get_job_core()
+        completion_time = super()._get_completion_time(job, start_core)
+        if completion_time <= job.get_due_time():
+            return True
+        else:
+            super().update_rejected(job)
+            return False
+
+    def __allocate_greedy_bestfit(self, job):
+        # getting starting core of the job
+        start_core = super()._search_loaded_machine(job)
+        # allocate job to machine using super method
+        super().allocate_job_to_core(job, start_core)
 
 
 class AlgorithmGMinIdle(Algorithm):
@@ -427,89 +697,240 @@ class AlgorithmGMinIdle(Algorithm):
         super().__init__('greedyminidle', jobs, machines)
 
     def execute(self, trial=False):
-        container_id = 1
+        # start time point reference
         simulation_start_time = time.time()
+        # sort all jobs in ascending order
         super()._sort_jobs_ascending_release_time()
+        # for every job in the list, do
         while len(super().get_job_list()) > 0:
+            # get the first job in the list
             job = super().get_job_fifo()
-
-            # Sort machines based on reverse order of remaining load
+            # sort machines based on reverse order of remaining load
             super()._sort_machines_descending_avail_time()
-
-            # Check whether the job can be legally completed
-            # Considering multicore jobs, last core for job c = m - job_core
-            start_core = super().get_machine_num() - job.get_job_core()
-            if start_core < 0:
-                super().update_rejected(job)
+            # check whether the job has enough cores to complete
+            # considering multi-core jobs, last core for job c = m - job_core
+            legal_completion_status = self.__check_legal_completion(job)
+            if not legal_completion_status:
                 continue
-
-            completion_time = super()._get_completion_time(job, start_core)
-            last_core = start_core
-            if completion_time <= job.get_due_time():
-                minimum_idle_time = None
-                minimum_idle_core = None
-                for start_core in range(last_core, -1, -1):
-                    completion_time = super()._get_completion_time(job, start_core)
-
-                    if completion_time > job.get_due_time():
-                        break
-                    else:
-                        start_time = super()._get_start_time(job, start_core)
-                        total_idle_time = 0
-                        for core in range(start_core, start_core + job.get_job_core()):
-                            total_idle_time += start_time - super().get_machine_list()[core].get_available_time()
-
-                        if minimum_idle_core is None:
-                            minimum_idle_time = total_idle_time
-                            minimum_idle_core = start_core
-
-                        if minimum_idle_time >= total_idle_time:
-                            minimum_idle_time = total_idle_time
-                            minimum_idle_core = start_core
-
-                if minimum_idle_core is None:
-                    print("ERROR: Valid core not found!")
-                    sys.exit()
-
-                start_time = super()._get_start_time(job, minimum_idle_core)
-                completion_time = super()._get_completion_time(job, minimum_idle_core)
-                for core in range(minimum_idle_core, minimum_idle_core + job.get_job_core()):
-                    container = Container(container_id)
-                    container.assign(job, start_time, completion_time,
-                                     super().get_machine_list()[core].get_machine_id())
-                    super().update_machine(core, container, completion_time)
-                    super().update_container_list(container)
-                    container_id += 1
-
-                job.update(start_time, completion_time)
-                super().update_accepted(job)
-            else:
-                super().update_rejected(job)
-
+            # check whether the job can be legally completed before due time on available cores
+            # greedy acceptance policy
+            acceptance_status = self.__check_acceptance_status(job)
+            if not acceptance_status:
+                continue
+            # allocate job based on greedy balanced allocation policy
+            self.__allocate_greedy_minidle(job)
+        # end time point reference
         simulation_end_time = time.time()
         execution_time = round(simulation_end_time - simulation_start_time, 4)
         super().update_execution_time(execution_time)
-
+        # updating the run time logs
         super()._update_logs()
+        # returning the result of the simulation
         return super()._results()
 
+    def __check_legal_completion(self, job):
+        # if a job has more cores than the one available in the simulation set-up, it can never be processed
+        # hence the job is rejected
+        start_core = super().get_machine_num() - job.get_job_core()
+        if start_core < 0:
+            super().update_rejected(job)
+            return False
+        else:
+            return True
 
-class AlgorithmBF(Algorithm):
+    def __check_acceptance_status(self, job):
+        # if a job with 'c' cores can be completed on/before its due time on 'c' least loaded cores,
+        # then it can be accepted. else, it is rejected
+        start_core = super().get_machine_num() - job.get_job_core()
+        completion_time = super()._get_completion_time(job, start_core)
+        if completion_time <= job.get_due_time():
+            return True
+        else:
+            super().update_rejected(job)
+            return False
 
-    def __init__(self, algorithm_id, jobs, machines):
-        super().__init__(algorithm_id, jobs, machines)
-        self.__open_containers = []
+    def __allocate_greedy_minidle(self, job):
+        # getting starting core of the job
+        last_core = super().get_machine_num() - job.get_job_core()
+        # reference variables for min idle execution
+        minimum_idle_time = None
+        minimum_idle_core = None
+        # we move from the least loaded core to most loaded core
+        for start_core in range(last_core, -1, -1):
+            # completion time on this core
+            completion_time = super()._get_completion_time(job, start_core)
+            # when it is no longer possible to execute a job on given core, we stop
+            if completion_time > job.get_due_time():
+                break
+            else:
+                # calculate start time on this core
+                start_time = super()._get_start_time(job, start_core)
+                # variable to calculate idle time
+                total_idle_time = 0
+                # go through all the cores
+                for core in range(start_core, start_core + job.get_job_core()):
+                    # update idle time
+                    total_idle_time += start_time - super().get_machine_list()[core].get_available_time()
 
-    def get_open_containers(self):
-        return self.__open_containers
+                # for the first machine, update the min idle variables as such
+                if minimum_idle_core is None:
+                    minimum_idle_time = total_idle_time
+                    minimum_idle_core = start_core
+
+                # for remaining executions, update only when a new min setting is found
+                # if there are multiple min settings, we use the machine which is most loaded
+                if minimum_idle_time >= total_idle_time:
+                    minimum_idle_time = total_idle_time
+                    minimum_idle_core = start_core
+        # once we have our min idle core, we schedule jobs on min idle to min idle + c cores
+        # allocate job to machine using super method
+        super().allocate_job_to_core(job, minimum_idle_core)
 
 
-class AlgorithmGBalancedBF:
+class AlgorithmGBalancedBF(Algorithm):
 
-    def __init__(self):
-        pass
+    def __init__(self, jobs, machines):
+        super().__init__('greedybalancedbackfill', jobs, machines)
 
-class AlgorithmGBestFitBF:
+    def execute(self, trial=False):
+        # start time point reference
+        simulation_start_time = time.time()
+        # sort all jobs in ascending order
+        super()._sort_jobs_ascending_release_time()
+        # for every job in the list, do
+        while len(super().get_job_list()) > 0:
+            # get the first job in the list
+            job = super().get_job_fifo()
+            # check backfill possibility
+            backfill_status = super().check_and_allocate_backfill(job)
+            if backfill_status:
+                continue
+            # sort machines based on reverse order of remaining load
+            super()._sort_machines_descending_avail_time()
+            # check whether the job has enough cores to complete
+            # considering multi-core jobs, last core for job c = m - job_core
+            legal_completion_status = self.__check_legal_completion(job)
+            if not legal_completion_status:
+                continue
+            # check whether the job can be legally completed before due time on available cores
+            # greedy acceptance policy
+            acceptance_status = self.__check_acceptance_status(job)
+            if not acceptance_status:
+                continue
+            # allocate job based on greedy balanced allocation policy
+            self.__allocate_greedy_balanced(job)
 
-    def __init__(self):
-        pass
+        # end time point reference
+        simulation_end_time = time.time()
+        execution_time = round(simulation_end_time - simulation_start_time, 4)
+        super().update_execution_time(execution_time)
+        # updating the run time logs
+        super()._update_logs()
+        # returning the result of the simulation
+        return super()._results()
+
+    def __check_legal_completion(self, job):
+        # if a job has more cores than the one available in the simulation set-up, it can never be processed
+        # hence the job is rejected
+        start_core = super().get_machine_num() - job.get_job_core()
+        if start_core < 0:
+            super().update_rejected(job)
+            return False
+        else:
+            return True
+
+    def __check_acceptance_status(self, job):
+        # if a job with 'c' cores can be completed on/before its due time on 'c' least loaded cores,
+        # then it can be accepted. else, it is rejected
+        start_core = super().get_machine_num() - job.get_job_core()
+        completion_time = super()._get_completion_time(job, start_core)
+        if completion_time <= job.get_due_time():
+            return True
+        else:
+            super().update_rejected(job)
+            return False
+
+    def __allocate_greedy_balanced(self, job):
+        # getting starting core of the job
+        start_core = super().get_machine_num() - job.get_job_core()
+        # allocate job to machine using super method
+        super().allocate_job_to_core(job, start_core)
+
+
+class AlgorithmGBestFitBF(Algorithm):
+
+    def __init__(self, jobs, machines):
+        super().__init__('greedybestfitbackfill', jobs, machines)
+
+    def execute(self, trial=False):
+        # start time point reference
+        simulation_start_time = time.time()
+        # sort all jobs in ascending order
+        super()._sort_jobs_ascending_release_time()
+        # for every job in the list, do
+        while len(super().get_job_list()) > 0:
+            # get the first job in the list
+            job = super().get_job_fifo()
+            # check backfill possibility
+            backfill_status = super().check_and_allocate_backfill(job)
+            if backfill_status:
+                continue
+            # sort machines based on reverse order of remaining load
+            super()._sort_machines_descending_avail_time()
+            # check whether the job has enough cores to complete
+            # considering multi-core jobs, last core for job c = m - job_core
+            legal_completion_status = self.__check_legal_completion(job)
+            if not legal_completion_status:
+                continue
+            # check whether the job can be legally completed before due time on available cores
+            # greedy acceptance policy
+            acceptance_status = self.__check_acceptance_status(job)
+            if not acceptance_status:
+                continue
+            # allocate job based on greedy balanced allocation policy
+            self.__allocate_greedy_bestfit(job)
+
+            # DELETE
+            print("After allocation of job {}".format(job.get_job_id()))
+            for machine in super().get_machine_list():
+                print(
+                    "machine {} with completion time {}".format(machine.get_machine_id(), machine.get_available_time()))
+            # DELETE
+
+        for job in super().get_accepted_jobs():
+            job.print_details()
+        # end time point reference
+        simulation_end_time = time.time()
+        execution_time = round(simulation_end_time - simulation_start_time, 4)
+        super().update_execution_time(execution_time)
+        # updating the run time logs
+        super()._update_logs()
+        # returning the result of the simulation
+        return super()._results()
+
+    def __check_legal_completion(self, job):
+        # if a job has more cores than the one available in the simulation set-up, it can never be processed
+        # hence the job is rejected
+        start_core = super().get_machine_num() - job.get_job_core()
+        if start_core < 0:
+            super().update_rejected(job)
+            return False
+        else:
+            return True
+
+    def __check_acceptance_status(self, job):
+        # if a job with 'c' cores can be completed on/before its due time on 'c' least loaded cores,
+        # then it can be accepted. else, it is rejected
+        start_core = super().get_machine_num() - job.get_job_core()
+        completion_time = super()._get_completion_time(job, start_core)
+        if completion_time <= job.get_due_time():
+            return True
+        else:
+            super().update_rejected(job)
+            return False
+
+    def __allocate_greedy_bestfit(self, job):
+        # getting starting core of the job
+        start_core = super()._search_loaded_machine(job)
+        # allocate job to machine using super method
+        super().allocate_job_to_core(job, start_core)

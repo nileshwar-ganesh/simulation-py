@@ -93,18 +93,11 @@ class Container:
         self.__machine = machine_id
         self.__vacant_size = 0
 
-    def reserve(self, start_time, end_time, vacant_size):
+    def reserve(self, start_time, end_time, vacant_size, machine_id):
         self.__start_time = start_time
         self.__end_time = end_time
         self.__vacant_size = vacant_size
-
-    def update(self, start_time, end_time, job=None, machine_id=None):
-        if job is not None and machine_id is not None:
-            self.__job = job
-            self.__machine = machine_id
-        self.__start_time = start_time
-        self.__end_time = end_time
-        self.__vacant_size = 0
+        self.__machine = machine_id
 
     def get_id(self):
         return self.__id
@@ -117,6 +110,9 @@ class Container:
 
     def get_end_time(self):
         return self.__end_time
+
+    def get_machine(self):
+        return self.__machine
 
     def get_vacant_size(self):
         return self.__vacant_size
@@ -156,6 +152,9 @@ class Machine:
         self.__schedule.append(container)
         self.__available_time = completion_time
 
+    def attach(self, container):
+        self.__schedule.append(container)
+
     def get_machine_id(self):
         return self.__machine_id
 
@@ -164,8 +163,10 @@ class Machine:
 
     def get_schedule(self):
         schedule = 'Machine ' + str(self.__machine_id) + ':'
+        self.__schedule.sort(key=lambda c: c.get_end_time())
         for container in self.__schedule:
-            schedule += container.get_job().get_job_id() + ' '
+            if container.get_job() is not None:
+                schedule += container.get_job().get_job_id() + ' '
         return schedule
 
     def print_schedule(self):

@@ -16,6 +16,7 @@ from settings import MACHINE_END
 
 def _run_simulation():
     set_num = 1
+    core = 1
 
     no_split = [3, 9, 15, 17, 18, 11, 16, 2, 4, 19, 6, 12, 7, 5, 14, 10, 8, 13]
     two_split = [20, 29]
@@ -31,29 +32,31 @@ def _run_simulation():
 
     for day in range(1, 32):
         if day in no_split:
-            parameters_no_split.append((day, '2019A', 1, 'MA', set_num))
+            parameters_no_split.append((day, '2019A', core, 'MA', set_num))
 
         if day in two_split:
-            parameters_two_split.append((day, '2019A', 1, 'MA', set_num, [i/10 for i in range(1, 6)]))
-            parameters_two_split.append((day, '2019A', 1, 'MA', set_num, [i/10 for i in range(6, 10)]))
+            parameters_two_split.append((day, '2019A', core, 'MA', set_num, [i/10 for i in range(1, 6)]))
+            parameters_two_split.append((day, '2019A', core, 'MA', set_num, [i/10 for i in range(6, 10)]))
 
         if day in three_split:
-            parameters_three_split.append((day, '2019A', 1, 'MA', set_num, [i/10 for i in range(1, 4)]))
-            parameters_three_split.append((day, '2019A', 1, 'MA', set_num, [i/10 for i in range(4, 7)]))
-            parameters_three_split.append((day, '2019A', 1, 'MA', set_num, [i/10 for i in range(7, 10)]))
+            parameters_three_split.append((day, '2019A', core, 'MA', set_num, [i/10 for i in range(1, 4)]))
+            parameters_three_split.append((day, '2019A', core, 'MA', set_num, [i/10 for i in range(4, 7)]))
+            parameters_three_split.append((day, '2019A', core, 'MA', set_num, [i/10 for i in range(7, 10)]))
 
         if day in five_split:
-            parameters_five_split.append((day, '2019A', 1, 'MA', set_num, [i/10 for i in range(1, 3)]))
-            parameters_five_split.append((day, '2019A', 1, 'MA', set_num, [i/10 for i in range(3, 5)]))
-            parameters_five_split.append((day, '2019A', 1, 'MA', set_num, [i/10 for i in range(5, 7)]))
-            parameters_five_split.append((day, '2019A', 1, 'MA', set_num, [i/10 for i in range(7, 9)]))
-            parameters_five_split.append((day, '2019A', 1, 'MA', set_num, [i/10 for i in range(9, 10)]))
+            parameters_five_split.append((day, '2019A', core, 'MA', set_num, [i/10 for i in range(1, 3)]))
+            parameters_five_split.append((day, '2019A', core, 'MA', set_num, [i/10 for i in range(3, 5)]))
+            parameters_five_split.append((day, '2019A', core, 'MA', set_num, [i/10 for i in range(5, 7)]))
+            parameters_five_split.append((day, '2019A', core, 'MA', set_num, [i/10 for i in range(7, 9)]))
+            parameters_five_split.append((day, '2019A', core, 'MA', set_num, [i/10 for i in range(9, 10)]))
 
         if day in sd_split:
             slacks = [i/10 for i in range(1, 10)]
             for slack in slacks:
-                parameters_sd_split.append((day, '2019A', 1, 'MA', set_num, [slack], [i/10 for i in range(30, 25, -1)]))
-                parameters_sd_split.append((day, '2019A', 1, 'MA', set_num, [slack], [i/10 for i in range(25, 19, -1)]))
+                parameters_sd_split.append((day, '2019A', core, 'MA', set_num,
+                                            [slack], [i/10 for i in range(30, 25, -1)]))
+                parameters_sd_split.append((day, '2019A', core, 'MA', set_num,
+                                            [slack], [i/10 for i in range(25, 19, -1)]))
 
     parameters = parameters_two_split + parameters_five_split
     scheduler = Scheduler()
@@ -64,6 +67,11 @@ def _run_simulation():
     print("COMPLETED...")
 
 
+def _run_simulation_test():
+    scheduler = Scheduler()
+    scheduler.run_specific_day(3, '2019A', 120, 'MA', 5, [0.2], [2.2])
+
+
 if __name__ == '__main__':
     operations = Operations()
     operations.clear_all_trace_files()
@@ -71,3 +79,4 @@ if __name__ == '__main__':
     operations.clear_all_logs()
 
     # _run_simulation()
+    # _run_simulation_test()

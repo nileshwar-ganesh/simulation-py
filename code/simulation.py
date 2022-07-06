@@ -8,7 +8,7 @@ from settings import MACHINE_START
 from datetime import datetime
 import math
 import copy
-
+import time
 
 
 class Scheduler:
@@ -41,12 +41,22 @@ class Scheduler:
                 for value in sd:
 
                     standard_deviation = round(slack/value, 3)
-                    self.__operations.generate_statistical_trace_iso(trace_jobs, trace_id, day, core,
-                                                                     slack_set, slack, standard_deviation, num)
 
                     job_file = self.__operations.get_statistical_trace_file_location(trace_id, day, slack,
                                                                                      standard_deviation, core, num,
                                                                                      True)
+
+                    if job_file is None:
+                        self.__operations.generate_statistical_trace_iso(trace_jobs, trace_id, day, core,
+                                                                         slack_set, slack, standard_deviation, num)
+                        job_file = self.__operations.get_statistical_trace_file_location(trace_id, day, slack,
+                                                                                         standard_deviation, core, num,
+                                                                                         True)
+                    else:
+                        print("Waiting for 60s before staring next operation...")
+                        time.sleep(60)
+                        print("Wait completed...")
+
                     jobs_master = self.__operations.get_jobs(job_file)
 
                     [machine_start, machine_end, machine_increment] = self.__operations.get_machine_settings(trace_id,
