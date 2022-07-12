@@ -2,6 +2,8 @@ import sys
 
 from functions import Operations
 from algorithms import AlgorithmGBalanced, AlgorithmGBestFit, AlgorithmThreshold, AlgorithmGMinIdle
+from algorithms import AlgorithmGBalancedBF, AlgorithmGBestFitBF
+from algorithms import AlgorithmOSScheduling
 from settings import SETS, SLACKS, SD
 from settings import STATISTICAL_TRACE_FOLDER, RESULT_FOLDER
 from settings import MACHINE_START
@@ -110,6 +112,172 @@ class Scheduler:
                         with open(result_file, "a") as file:
                             file.write(data)
                         file.close()
+
+
+        self.__operations.update_parallel_log(day, core, 'end')
+
+    def run_specific_day_backfill(self, day, trace_id, core, slack_set, num, slacks=SLACKS, sd=SD):
+        if core == 1:
+            print('No backfill simulations possible for single core job sets. Please select multicore dataset.')
+            return False
+
+        self.__operations.update_parallel_log(day, core, 'start')
+
+        trace_jobs = self.__operations.read_jobs_iso(trace_id, day, core)
+
+        # for num in SETS:
+        if True:
+            file_name = self.__operations.get_result_file_name(trace_id, day, core, num, slacks, sd)
+            result_file = RESULT_FOLDER + file_name
+            with open(result_file, "w") as file:
+                header = "SET; SLACK; SD; MACHINES; DENOMINATOR; "
+                header += "ACC JOBS GB-BF; REJ JOBS GB-BF; ACC LOAD GB-BF; " \
+                          "REJ LOAD GB-BF; TOT LOAD GB-BF; RUN TIME GB-BF; "
+                header += "ACC JOBS GBF-BF; REJ JOBS GBF-BF; ACC LOAD GBF-BF;" \
+                          " REJ LOAD GBF-BF; TOT LOAD GBF-BF; RUN TIME GBF-BF; "
+                header += "OPT LOAD BF; "
+                header += "\n"
+                file.write(header)
+            file.close()
+
+            for slack in slacks:
+                for value in sd:
+
+                    standard_deviation = round(slack/value, 3)
+
+                    job_file = self.__operations.get_statistical_trace_file_location(trace_id, day, slack,
+                                                                                     standard_deviation, core, num,
+                                                                                     True)
+
+                    if job_file is None:
+                        self.__operations.generate_statistical_trace_iso(trace_jobs, trace_id, day, core,
+                                                                         slack_set, slack, standard_deviation, num)
+                        job_file = self.__operations.get_statistical_trace_file_location(trace_id, day, slack,
+                                                                                         standard_deviation, core, num,
+                                                                                         True)
+                    else:
+                        print("Waiting for 60s before staring next operation...")
+                        time.sleep(60)
+                        print("Wait completed...")
+
+                    jobs_master = self.__operations.get_jobs(job_file)
+
+                    [machine_start, machine_end, machine_increment] = self.__operations.get_machine_settings(trace_id,
+                                                                                                             day,
+                                                                                                             core)
+
+                    for machine_num in range(machine_start, machine_end+1, machine_increment):
+                        data = ""
+                        data += "{}; {}; {}; {}; {}; ".format(num, slack, standard_deviation, machine_num, value)
+
+                        machines_master = self.__operations.get_machines(machine_num)
+
+                        jobs = copy.deepcopy(jobs_master)
+                        machines = copy.deepcopy(machines_master)
+                        greedy_balanced = AlgorithmGBalancedBF(jobs, machines)
+                        results_gb = greedy_balanced.execute()
+                        data += "{}; {}; {}; {}; {}; {}; ".format(results_gb[0], results_gb[1], results_gb[2],
+                                                                  results_gb[3], results_gb[4], results_gb[5])
+
+                        jobs = copy.deepcopy(jobs_master)
+                        machines = copy.deepcopy(machines_master)
+                        greedy_bestfit = AlgorithmGBestFitBF(jobs, machines)
+                        results_gbf = greedy_bestfit.execute()
+                        data += "{}; {}; {}; {}; {}; {}; ".format(results_gbf[0], results_gbf[1], results_gbf[2],
+                                                                  results_gbf[3], results_gbf[4], results_gbf[5])
+
+                        optimal_load = max(results_gb[4], results_gbf[4])
+
+                        data += "{}; ".format(optimal_load)
+                        print(data)
+
+                        data += "\n"
+                        with open(result_file, "a") as file:
+                            file.write(data)
+                        file.close()
+
+        self.__operations.update_parallel_log(day, core, 'end')
+
+    def run_specific_day_preemption(self, day, trace_id, core, slack_set, num, slacks=SLACKS, sd=SD):
+        self.__operations.update_parallel_log(day, core, 'start')
+
+        trace_jobs = self.__operations.read_jobs_iso(trace_id, day, core)
+
+        # for num in SETS:
+        if True:
+            file_name = self.__operations.get_result_file_name(trace_id, day, core, num, slacks, sd)
+            result_file = RESULT_FOLDER + file_name
+            with open(result_file, "w") as file:
+                header = "SET; SLACK; SD; MACHINES; DENOMINATOR; "
+                header += "ACC JOBS GB-BF; REJ JOBS GB-BF; ACC LOAD GB-BF; " \
+                          "REJ LOAD GB-BF; TOT LOAD GB-BF; RUN TIME GB-BF; "
+                header += "ACC JOBS GBF-BF; REJ JOBS GBF-BF; ACC LOAD GBF-BF;" \
+                          " REJ LOAD GBF-BF; TOT LOAD GBF-BF; RUN TIME GBF-BF; "
+                header += "OPT LOAD BF; "
+                header += "\n"
+                file.write(header)
+            file.close()
+
+            for slack in slacks:
+                for value in sd:
+
+                    standard_deviation = round(slack/value, 3)
+
+                    job_file = self.__operations.get_statistical_trace_file_location(trace_id, day, slack,
+                                                                                     standard_deviation, core, num,
+                                                                                     True)
+
+                    if job_file is None:
+                        self.__operations.generate_statistical_trace_iso(trace_jobs, trace_id, day, core,
+                                                                         slack_set, slack, standard_deviation, num)
+                        job_file = self.__operations.get_statistical_trace_file_location(trace_id, day, slack,
+                                                                                         standard_deviation, core, num,
+                                                                                         True)
+                    else:
+                        print("Waiting for 60s before staring next operation...")
+                        time.sleep(60)
+                        print("Wait completed...")
+
+                    jobs_master = self.__operations.get_jobs(job_file)
+
+                    [machine_start, machine_end, machine_increment] = self.__operations.get_machine_settings(trace_id,
+                                                                                                             day,
+                                                                                                             core)
+
+                    machine_start = 560
+                    for machine_num in range(machine_start, machine_end+1, machine_increment):
+                        data = ""
+                        data += "{}; {}; {}; {}; {}; ".format(num, slack, standard_deviation, machine_num, value)
+
+                        machines_master = self.__operations.get_machines(machine_num)
+
+                        jobs = copy.deepcopy(jobs_master)
+                        machines = copy.deepcopy(machines_master)
+                        greedy_balanced = AlgorithmOSScheduling(jobs, machines, slack)
+                        results_gb = greedy_balanced.execute()
+                        data += "{}; {}; {}; {}; {}; {}; ".format(results_gb[0], results_gb[1], results_gb[2],
+                                                                  results_gb[3], results_gb[4], results_gb[5])
+
+                        """
+                        jobs = copy.deepcopy(jobs_master)
+                        machines = copy.deepcopy(machines_master)
+                        greedy_bestfit = AlgorithmGBestFitBF(jobs, machines)
+                        results_gbf = greedy_bestfit.execute()
+                        data += "{}; {}; {}; {}; {}; {}; ".format(results_gbf[0], results_gbf[1], results_gbf[2],
+                                                                  results_gbf[3], results_gbf[4], results_gbf[5])
+
+                        optimal_load = max(results_gb[4], results_gbf[4])
+
+                        data += "{}; ".format(optimal_load)
+                        """
+                        print(data)
+
+                        data += "\n"
+                        with open(result_file, "a") as file:
+                            file.write(data)
+                        file.close()
+
+                        sys.exit()
 
         self.__operations.update_parallel_log(day, core, 'end')
 

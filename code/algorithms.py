@@ -1,3 +1,4 @@
+import copy
 import os
 import sys
 import time
@@ -87,8 +88,8 @@ class Algorithm:
         self.__rejected_jobs.append(job)
         self.__rejected_load += job.get_job_core() * job.get_processing_time()
 
-    def update_execution_time(self, time):
-        self.__execution_time = time
+    def update_execution_time(self, execution_time):
+        self.__execution_time = execution_time
 
     def allocate_job_to_core(self, job, start_core):
         # start time on this core
@@ -124,7 +125,7 @@ class Algorithm:
     def check_and_allocate_backfill(self, job):
         # if there are no open containers yet, simply return false
         if len(self.__open_containers) <= 0:
-            print('No open containers yet.')
+            # print('No open containers yet.')
             return False
         # get the job properties
         job_release_time = job.get_release_time()
@@ -134,6 +135,8 @@ class Algorithm:
 
         # create a binary matrix with eligible open containers
         container_bin_matrix = []
+        # collect machines ids to which each container belongs
+        container_machine_ids = []
         # for every container in the list of open containers, do
         for container in self.__open_containers:
             # time at which container becomes available
@@ -146,6 +149,8 @@ class Algorithm:
             if usable_length >= job_processing_time:
                 # first column is a reference to the container
                 container_id = np.array([container.get_id()])
+                # collect machine id
+                container_machine_ids.append(container.get_machine())
                 # each row is divided into three blocks
                 # start block is vacant area from job release till container start, filled with zeros
                 start_block = np.zeros(max(job_release_time, container_start_time) - job_release_time)
@@ -157,9 +162,12 @@ class Algorithm:
                 container_bin_matrix.append(np.hstack((container_id, start_block, mid_block, end_block)))
 
         # if not even one container exists, where enough job length is available, then return false
+        # else if containers are available partially, check for enough machines which are free
+        free_machines = []
         if len(container_bin_matrix) <= 0:
-            print('Not even one open container exists, which has free space equivalent to the job length.')
+            # print('Not even one open container exists, which has free space equivalent to the job length.')
             return False
+
         # this matrix sums up the rows vertically. if this value is larger than or equal to the job core requirement,
         # then we know that there are enough free containers at this point which meet the core requirement
         container_overlap_matrix = np.sum(container_bin_matrix, axis=0)
@@ -185,7 +193,7 @@ class Algorithm:
                 break
 
         if start_point is None or job_length < job_processing_time:
-            print('Not enough containers to meet the core requirement of the job.')
+            # print('Not enough containers to meet the core requirement of the job.')
             return False
 
         # variable to keep count of how many containers we already assigned
@@ -270,6 +278,7 @@ class Algorithm:
             index = index_array[0][0]
             self.__machines[index].attach(container)
 
+        self.update_accepted(job)
         return True
 
     # Returns result in a list form
@@ -788,6 +797,12 @@ class AlgorithmGMinIdle(Algorithm):
 
 
 class AlgorithmGBalancedBF(Algorithm):
+    """
+        this class basically inherits all properties of the Algorithm class.
+        first step is to check whether job can be processed completely with the available holes
+        if so, we so ahead and schedule the job in the holes, without affecting the completion times on machines
+        if not, then the traditional greedy balanced algorithm is followed.
+    """
 
     def __init__(self, jobs, machines):
         super().__init__('greedybalancedbackfill', jobs, machines)
@@ -819,7 +834,6 @@ class AlgorithmGBalancedBF(Algorithm):
                 continue
             # allocate job based on greedy balanced allocation policy
             self.__allocate_greedy_balanced(job)
-
         # end time point reference
         simulation_end_time = time.time()
         execution_time = round(simulation_end_time - simulation_start_time, 4)
@@ -858,6 +872,12 @@ class AlgorithmGBalancedBF(Algorithm):
 
 
 class AlgorithmGBestFitBF(Algorithm):
+    """
+        this class basically inherits all properties of the Algorithm class.
+        first step is to check whether job can be processed completely with the available holes
+        if so, we so ahead and schedule the job in the holes, without affecting the completion times on machines
+        if not, then the traditional greedy bestfit algorithm is followed.
+    """
 
     def __init__(self, jobs, machines):
         super().__init__('greedybestfitbackfill', jobs, machines)
@@ -889,16 +909,6 @@ class AlgorithmGBestFitBF(Algorithm):
                 continue
             # allocate job based on greedy balanced allocation policy
             self.__allocate_greedy_bestfit(job)
-
-            # DELETE
-            print("After allocation of job {}".format(job.get_job_id()))
-            for machine in super().get_machine_list():
-                print(
-                    "machine {} with completion time {}".format(machine.get_machine_id(), machine.get_available_time()))
-            # DELETE
-
-        for job in super().get_accepted_jobs():
-            job.print_details()
         # end time point reference
         simulation_end_time = time.time()
         execution_time = round(simulation_end_time - simulation_start_time, 4)
@@ -934,3 +944,144 @@ class AlgorithmGBestFitBF(Algorithm):
         start_core = super()._search_loaded_machine(job)
         # allocate job to machine using super method
         super().allocate_job_to_core(job, start_core)
+
+
+class AlgorithmOSScheduling(Algorithm):
+
+    def __init__(self, jobs, machines, epsilon):
+        super().__init__("onlineslackscheduling", jobs, machines)
+        self.__reference_time = 0
+        self.__epsilon = epsilon
+        self.__working_list = []
+
+    def execute(self):
+        # start time point reference
+        simulation_start_time = time.time()
+        # sort all jobs in ascending order
+        super()._sort_jobs_ascending_release_time()
+        # calculate function value
+        value_fme = self.__function_m_eps()
+        # for every job in the list, do
+        job_count = 0
+        while len(super().get_job_list()) > 0:
+            # get the first job in the list
+            job = super().get_job_fifo()
+            job.print_details() # DELETE
+            # useful job properties
+            job_due_time = job.get_due_time()
+            job_processing_time = job.get_processing_time()
+            # set reference time to be the release time of the job
+            self.__reference_time = job.get_release_time()
+            # update working list
+            self.__update_working_list(job_processing_time, job_due_time)
+            # tentatively accept the job and create a new accepted list
+            tentative_accepted_list = self.__working_list + [job]
+
+            # DELETE
+            print("Working list has {} jobs".format(len(self.__working_list)))
+            """
+            print("Details of the working list : ")
+            print([j.get_job_id() for j in self.__working_list])
+            
+            job_count += 1
+            if job_count > 1000:
+                break
+            """
+            # DELETE
+            rejection_status = False
+            for job_i in tentative_accepted_list:
+                # job properties which are used in calculations
+                job_i_processing_time = job_i.get_processing_time()
+                job_i_due_time = job_i.get_due_time()
+                # expressions which define the check conditions
+                expression_1 = job_i_processing_time > (job_due_time - self.__reference_time) / (1 + self.__epsilon)
+                expression_2 = (job_due_time - self.__reference_time) / (1 + self.__epsilon) \
+                                                                             + self.__reference_time >= job_due_time
+                expression_3 = job_i_due_time >= job_due_time
+                expression_4 = job_i_due_time > job_due_time - job_processing_time
+                expression_5 = job_i_due_time < job_due_time
+                # if none of the check conditions matter, we can simply move on to next job
+                if not (expression_1 and expression_2):
+                    if not expression_3:
+                        if not (expression_4 and expression_5):
+                            continue
+
+                v_accept_ref = 0
+                v_accept_due = 0
+                v_min = 0
+                for job_j in tentative_accepted_list:
+                    time_expression = (job_due_time - self.__reference_time) / (1 + self.__epsilon)
+                    v_accept_ref += self.__calculate_v_accept_job(job_j, time_expression)
+                    v_accept_due += self.__calculate_v_accept_job(job_j, job_i_due_time)
+                    v_min += self.__calculate_v_min_job(job_j, job_i_due_time)
+
+                expression_6 = v_accept_ref > \
+                               value_fme * (job_i_due_time - self.__reference_time) / (1 + self.__epsilon)
+                expression_7 = v_accept_due > value_fme * (job_i_due_time - self.__reference_time)
+                expression_8 = v_min > super().get_machine_num() * (job_i_due_time - self.__reference_time)
+
+                if expression_1 and expression_2:
+                    if expression_6:
+                        super().update_rejected(job)
+                        rejection_status = True
+                        break
+
+                if expression_3:
+                    if expression_7:
+                        super().update_rejected(job)
+                        rejection_status = True
+                        break
+
+                if expression_4 and expression_5:
+                    if expression_8:
+                        super().update_rejected(job)
+                        rejection_status = True
+                        break
+
+            if not rejection_status:
+                super().update_accepted(copy.deepcopy(job))
+                self.__working_list.append(copy.deepcopy(job))
+        # end time point reference
+        simulation_end_time = time.time()
+        execution_time = round(simulation_end_time - simulation_start_time, 4)
+        super().update_execution_time(execution_time)
+        # updating the run time logs
+        super()._update_logs()
+        # returning the result of the simulation
+        return super()._results()
+
+    def __update_working_list(self, processing_time, due_time):
+        # self.__working_list = copy.deepcopy(super().get_accepted_jobs())
+        due_dates = np.array([j.get_due_time() for j in self.__working_list])
+        index_array = np.where(due_dates < self.__reference_time)
+        indices = index_array[0].tolist()
+        while len(indices) > 0:
+            index = indices.pop(-1)
+            self.__working_list.pop(index)
+
+    def __function_m_eps(self):
+        expression_1 = ((1 + self.__epsilon) / self.__epsilon) ** (1 / super().get_machine_num())
+        expression_2 = (1 + self.__epsilon)
+        expression_3 = expression_1 - 1
+        value = (1 / expression_2) * (expression_1 / expression_3)
+        return value
+
+    def __calculate_v_min_job(self, job, reference_time):
+        if job.get_due_time() - job.get_processing_time() >= reference_time:
+            return 0
+        elif job.get_due_time() <= reference_time:
+            return job.get_processing_time()
+        else:
+            return job.get_processing_time() - job.get_due_time() + reference_time
+
+    def __calculate_v_accept_job(self, job, reference_time):
+        expression = job.get_due_time() - (job.get_due_time() / (1 + self.__epsilon))
+        if job.get_due_time() <= reference_time:
+            return job.get_processing_time()
+        elif job.get_due_time() > reference_time > expression:
+            return max(0, job.get_processing_time() - (job.get_due_time() / (1 + self.__epsilon)))
+        elif expression >= reference_time > job.get_due_time() - job.get_processing_time():
+            return job.get_processing_time() - job.get_due_time() + reference_time
+        elif job.get_due_time() - job.get_processing_time() >= reference_time:
+            return 0
+
