@@ -52,6 +52,9 @@ class Algorithm:
     def get_job_fifo(self):
         return self.__jobs.pop(0)
 
+    def read_job_fifo(self):
+        return self.__jobs[0]
+
     def get_machine_list(self):
         return self.__machines
 
@@ -66,6 +69,11 @@ class Algorithm:
 
     def get_open_containers(self):
         return self.__open_containers
+
+    def get_container_id(self):
+        id = self.__container_id
+        self.__container_id += 1
+        return id
 
     # Update methods to modify private class variables
     def update_machine(self, core, container, completion_time):
@@ -313,6 +321,11 @@ class Algorithm:
         machine_avail_time = self.__machines[core].get_available_time()
         return machine_avail_time
 
+    # this method returns machine reference time
+    def _get_machine_reference_time(self, core):
+        machine_reference_time = self.__machines[core].get_reference_time()
+        return machine_reference_time
+
     # method to return completion time of a job on a particular machine
     def _get_completion_time(self, job, core):
         release_time = job.get_release_time()
@@ -435,6 +448,7 @@ class AlgorithmGBalanced(Algorithm):
         start_core = super().get_machine_num() - job.get_job_core()
         # allocate job to machine using super method
         super().allocate_job_to_core(job, start_core)
+
 
 class AlgorithmGBestFit(Algorithm):
     """
@@ -953,94 +967,86 @@ class AlgorithmOSScheduling(Algorithm):
         self.__reference_time = 0
         self.__epsilon = epsilon
         self.__working_list = []
+        self.__v_accept = {}
+        self.__v_min = {}
+
+
+class AlgorithmRegion(Algorithm):
+
+    def __init__(self, jobs, machines, epsilon, alpha=1):
+        super().__init__('region', jobs, machines)
+        # system parameters - no commitment model
+        self.__alpha = alpha
+        self.__beta = epsilon / 4
+        self.__delta = epsilon / 2
+
+        self.__available_jobs = []
+        self.__released_jobs = []
+        self.__reference_time = None
 
     def execute(self):
         # start time point reference
         simulation_start_time = time.time()
         # sort all jobs in ascending order
         super()._sort_jobs_ascending_release_time()
-        # calculate function value
-        value_fme = self.__function_m_eps()
-        # for every job in the list, do
-        job_count = 0
+        # additional time points
+        current_release_time = 0
+        incoming_time = 0
         while len(super().get_job_list()) > 0:
             # get the first job in the list
-            job = super().get_job_fifo()
-            job.print_details() # DELETE
-            # useful job properties
-            job_due_time = job.get_due_time()
-            job_processing_time = job.get_processing_time()
-            # set reference time to be the release time of the job
+            job = super().read_job_fifo()
             self.__reference_time = job.get_release_time()
-            # update working list
-            self.__update_working_list(job_processing_time, job_due_time)
-            # tentatively accept the job and create a new accepted list
-            tentative_accepted_list = self.__working_list + [job]
 
-            # DELETE
-            print("Working list has {} jobs".format(len(self.__working_list)))
-            """
-            print("Details of the working list : ")
-            print([j.get_job_id() for j in self.__working_list])
-            
-            job_count += 1
-            if job_count > 1000:
-                break
-            """
-            # DELETE
-            rejection_status = False
-            for job_i in tentative_accepted_list:
-                # job properties which are used in calculations
-                job_i_processing_time = job_i.get_processing_time()
-                job_i_due_time = job_i.get_due_time()
-                # expressions which define the check conditions
-                expression_1 = job_i_processing_time > (job_due_time - self.__reference_time) / (1 + self.__epsilon)
-                expression_2 = (job_due_time - self.__reference_time) / (1 + self.__epsilon) \
-                                                                             + self.__reference_time >= job_due_time
-                expression_3 = job_i_due_time >= job_due_time
-                expression_4 = job_i_due_time > job_due_time - job_processing_time
-                expression_5 = job_i_due_time < job_due_time
-                # if none of the check conditions matter, we can simply move on to next job
-                if not (expression_1 and expression_2):
-                    if not expression_3:
-                        if not (expression_4 and expression_5):
-                            continue
+            # collect all jobs released at the same time
+            while super().read_job_fifo().get_release_time() == self.__reference_time:
+                self.__released_jobs.append(super().get_job_fifo())
+                # if there are no jobs left in the list, then break
+                if len(super().get_job_list()) <= 0:
+                    break
 
-                v_accept_ref = 0
-                v_accept_due = 0
-                v_min = 0
-                for job_j in tentative_accepted_list:
-                    time_expression = (job_due_time - self.__reference_time) / (1 + self.__epsilon)
-                    v_accept_ref += self.__calculate_v_accept_job(job_j, time_expression)
-                    v_accept_due += self.__calculate_v_accept_job(job_j, job_i_due_time)
-                    v_min += self.__calculate_v_min_job(job_j, job_i_due_time)
+            # check for the next incoming job
+            if len(super().get_job_list()) > 0:
+                # there are still jobs left
+                incoming_time = super().read_job_fifo().get_release_time()
+            else:
+                # assign some large value
+                incoming_time = sys.maxsize
 
-                expression_6 = v_accept_ref > \
-                               value_fme * (job_i_due_time - self.__reference_time) / (1 + self.__epsilon)
-                expression_7 = v_accept_due > value_fme * (job_i_due_time - self.__reference_time)
-                expression_8 = v_min > super().get_machine_num() * (job_i_due_time - self.__reference_time)
+            # check for preemption
+            # status is 1, if new jobs are released that overlap with machine time
+            # status is 2, if there are no more small jobs left for preemption
+            status = self.__preemption_routine()
 
-                if expression_1 and expression_2:
-                    if expression_6:
-                        super().update_rejected(job)
-                        rejection_status = True
+            if status:
+                continue
+            else:
+                # all released jobs till now are available
+                self.__available_jobs += self.__released_jobs
+                self.__released_jobs = []
+                # jobs need to be scheduled in SPT order
+                self.__available_jobs.sort(key=lambda j: j.get_processing_time(), reverse=False)
+                while len(self.__available_jobs) > 0:
+                    # if there exists at least one machine, which has processing power before next incoming job
+                    # schedule from available jobs
+                    super()._sort_machines_descending_avail_time()
+                    earliest_available_time = super().get_machine_list()[-1].get_available_time()
+                    # if there are additional jobs which are released in between, then we need to consider then first
+                    if earliest_available_time >= incoming_time:
                         break
+                    job = self.__available_jobs.pop(0)
+                    # check whether the job has enough cores to complete
+                    # considering multi-core jobs, last core for job c = m - job_core
+                    legal_completion_status = self.__check_legal_completion(job)
+                    if not legal_completion_status:
+                        continue
+                    # check whether the job can be legally completed before due time on available cores
+                    # greedy acceptance policy
+                    acceptance_status = self.__check_acceptance_status(job)
+                    if not acceptance_status:
+                        continue
+                    # allocate job based on greedy balanced allocation policy
+                    self.__allocate_greedy_bestfit(job)
 
-                if expression_3:
-                    if expression_7:
-                        super().update_rejected(job)
-                        rejection_status = True
-                        break
-
-                if expression_4 and expression_5:
-                    if expression_8:
-                        super().update_rejected(job)
-                        rejection_status = True
-                        break
-
-            if not rejection_status:
-                super().update_accepted(copy.deepcopy(job))
-                self.__working_list.append(copy.deepcopy(job))
         # end time point reference
         simulation_end_time = time.time()
         execution_time = round(simulation_end_time - simulation_start_time, 4)
@@ -1050,38 +1056,163 @@ class AlgorithmOSScheduling(Algorithm):
         # returning the result of the simulation
         return super()._results()
 
-    def __update_working_list(self, processing_time, due_time):
-        # self.__working_list = copy.deepcopy(super().get_accepted_jobs())
-        due_dates = np.array([j.get_due_time() for j in self.__working_list])
-        index_array = np.where(due_dates < self.__reference_time)
-        indices = index_array[0].tolist()
-        while len(indices) > 0:
-            index = indices.pop(-1)
-            self.__working_list.pop(index)
+    def __preemption_routine(self):
+        # sort all newly released jobs based on the processing time
+        self.__released_jobs.sort(key=lambda j: j.get_processing_time(), reverse=False)
+        # check for preemption for newly released jobs
+        while len(self.__released_jobs) > 0:
+            job = self.__released_jobs[0]
+            # job properties
+            job_processing_time = job.get_processing_time()
+            job_release_time = job.get_release_time()
+            job_due_time = job.get_due_time()
+            # sort machines based on reference time - smallest to largest
+            super()._sort_machines_descending_avail_time()
+            status_assigned = False
+            for m in range(0, super().get_machine_num()):
+                # if machine does not even have a single container, no need of preemption
+                # exit preemption routine for this machine and check other machines
+                if len(super().get_machine_list()[m].get_scheduled_containers()) <= 0:
+                    continue
+                container_index = super().get_machine_list()[m].get_container_index(self.__reference_time)
+                # if there are no suitable containers, that means the job can be scheduled at the end
+                # exit preemption routine for this machine and check other machines
+                if container_index is None:
+                    continue
+                total_containers = len(super().get_machine_list()[m].get_scheduled_containers())
+                # find all containers that overlap with the time period
+                # earliest start time possible = release date of the job
+                # latest start time possible = due date of the job - processing time of the job (tight)
+                container_indices = []
+                for c in range(container_index, total_containers):
+                    start_time = self.get_machine_list()[m].get_scheduled_containers()[c].get_start_time()
+                    if start_time > job_due_time - job_processing_time:
+                        break
+                    else:
+                        container_indices.append(c)
 
-    def __function_m_eps(self):
-        expression_1 = ((1 + self.__epsilon) / self.__epsilon) ** (1 / super().get_machine_num())
-        expression_2 = (1 + self.__epsilon)
-        expression_3 = expression_1 - 1
-        value = (1 / expression_2) * (expression_1 / expression_3)
-        return value
+                # now there are no overlapping regions, simply continue to next machine
+                if len(container_indices) <= 0:
+                    continue
+                else:
+                    # check whether the region can be preempted
+                    # conditions p_i < beta * p_j for all available containers on this machine
+                    for index in container_indices:
+                        start_time = self.get_machine_list()[m].get_scheduled_containers()[index] \
+                            .get_start_time()
+                        end_time = self.get_machine_list()[m].get_scheduled_containers()[index] \
+                            .get_end_time()
+                        processing_time_j = end_time - start_time
+                        container_type = self.get_machine_list()[m].get_scheduled_containers()[index].get_type()
+                        container_start_time = self.get_machine_list()[m].get_scheduled_containers()[index] \
+                            .get_start_time()
+                        # job cannot be preempted based on the processing time condition
+                        if job_processing_time >= self.__beta * processing_time_j:
+                            continue
+                        else:
+                            # if interval is starting interval, then start time and release time should not overlap
+                            if container_type == 0 and job_release_time == container_start_time:
+                                continue
+                            else:
+                                old_container_start = container_start_time
+                                split_container_end_time = None
+                                # assign the job
+                                container_start_time = max(job_release_time, container_start_time)
+                                container_size = self.__alpha * job_processing_time
+                                container_end_time = container_start_time + container_size
+                                machine_id = super().get_machine_list()[m].get_machine_id()
+                                new_container = Container(super().get_container_id())
+                                new_container.assign(job, container_start_time, container_end_time, machine_id, 0)
 
-    def __calculate_v_min_job(self, job, reference_time):
-        if job.get_due_time() - job.get_processing_time() >= reference_time:
-            return 0
-        elif job.get_due_time() <= reference_time:
-            return job.get_processing_time()
+                                # check whether the previous interval needs to be split
+                                split_container = None
+                                if container_start_time == old_container_start:
+                                    # no need for additional container
+                                    # we can fit in new container and simply push the existing one to later time
+                                    container_start_time = container_end_time
+                                    container_end_time = super().get_machine_list()[m]. \
+                                        get_scheduled_containers()[index].get_end_time() + container_size
+                                    super().get_machine_list()[m].get_scheduled_containers()[index] \
+                                        .update(container_start_time, container_end_time, 1)
+                                else:
+                                    # in case of a split, we need to get additional start time and end time for new
+                                    # split container, which starts after the container of our new small job
+                                    split_container_start_time = container_end_time
+                                    split_container_end_time = super().get_machine_list()[m]. \
+                                        get_scheduled_containers()[index].get_end_time() + container_size
+                                    container_end_time = container_start_time
+                                    container_start_time = super().get_machine_list()[m]. \
+                                        get_scheduled_containers()[index].get_start_time()
+                                    container_type = super().get_machine_list()[m]. \
+                                        get_scheduled_containers()[index].get_type()
+                                    super().get_machine_list()[m].get_scheduled_containers()[index] \
+                                        .update(container_start_time, container_end_time, container_type)
+
+                                    # creating a new split container
+                                    split_job = super().get_machine_list()[m]. \
+                                        get_scheduled_containers()[index].get_job()
+                                    machine_id = super().get_machine_list()[m].get_machine_id()
+                                    split_container = Container(super().get_container_id())
+                                    split_container.assign(split_job, split_container_start_time,
+                                                           split_container_end_time, machine_id, 1)
+
+                                # update values for all following containers
+                                for c in range(index + 1, total_containers):
+                                    container_start_time = super().get_machine_list()[m].get_scheduled_containers()[c].\
+                                        get_start_time() + container_size
+                                    container_end_time = super().get_machine_list()[m].get_scheduled_containers()[c]. \
+                                        get_end_time() + container_size
+                                    container_type = super().get_machine_list()[m].get_scheduled_containers()[c]. \
+                                        get_type()
+                                    super().get_machine_list()[m].get_scheduled_containers()[c]. \
+                                        update(container_start_time, container_end_time, container_type)
+
+                                # add additional containers to the schedule (new, split)
+                                available_time = super().get_machine_list()[m].get_scheduled_containers()[-1] \
+                                    .get_end_time()
+                                if split_container_end_time is not None:
+                                    available_time = max(split_container_end_time, available_time)
+                                super().get_machine_list()[m].update(new_container, available_time)
+                                if split_container_end_time is not None:
+                                    super().get_machine_list()[m].update(split_container, available_time)
+
+                                status_assigned = True
+                                break
+                # if job is assigned, then we move on to the next job
+                if status_assigned:
+                    break
+            # if job is assigned, then we move on to the next job
+            if status_assigned:
+                # here we update the new job into the schedule
+                super().update_accepted(job)
+                self.__released_jobs.pop(0)
+            else:
+                return False  # smallest job cannot be preempted, so go back to normal allocation
+        return True  # if all jobs can be assigned via preemption, then return true
+
+    def __check_legal_completion(self, job):
+        # if a job has more cores than the one available in the simulation set-up, it can never be processed
+        # hence the job is rejected
+        start_core = super().get_machine_num() - job.get_job_core()
+        if start_core < 0:
+            super().update_rejected(job)
+            return False
         else:
-            return job.get_processing_time() - job.get_due_time() + reference_time
+            return True
 
-    def __calculate_v_accept_job(self, job, reference_time):
-        expression = job.get_due_time() - (job.get_due_time() / (1 + self.__epsilon))
-        if job.get_due_time() <= reference_time:
-            return job.get_processing_time()
-        elif job.get_due_time() > reference_time > expression:
-            return max(0, job.get_processing_time() - (job.get_due_time() / (1 + self.__epsilon)))
-        elif expression >= reference_time > job.get_due_time() - job.get_processing_time():
-            return job.get_processing_time() - job.get_due_time() + reference_time
-        elif job.get_due_time() - job.get_processing_time() >= reference_time:
-            return 0
+    def __check_acceptance_status(self, job):
+        # if a job with 'c' cores can be completed on/before its due time on 'c' least loaded cores,
+        # then it can be accepted. else, it is rejected
+        start_core = super().get_machine_num() - job.get_job_core()
+        completion_time = super()._get_completion_time(job, start_core)
+        if completion_time <= job.get_due_time():
+            return True
+        else:
+            super().update_rejected(job)
+            return False
 
+    def __allocate_greedy_bestfit(self, job):
+        # getting starting core of the job
+        start_core = super()._search_loaded_machine(job)
+        # allocate job to machine using super method
+        super().allocate_job_to_core(job, start_core)

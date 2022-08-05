@@ -3,11 +3,13 @@ import sys
 from functions import Operations
 from algorithms import AlgorithmGBalanced, AlgorithmGBestFit, AlgorithmThreshold, AlgorithmGMinIdle
 from algorithms import AlgorithmGBalancedBF, AlgorithmGBestFitBF
-from algorithms import AlgorithmOSScheduling
+# from algorithms import AlgorithmOSScheduling
+from testalgorithm import AlgorithmOSScheduling, AlgorithmOSSchedulingO
 from settings import SETS, SLACKS, SD
-from settings import STATISTICAL_TRACE_FOLDER, RESULT_FOLDER
+from settings import STATISTICAL_TRACE_FOLDER, RESULT_FOLDER, PROJECT_FOLDER_PATH
 from settings import MACHINE_START
 from datetime import datetime
+from testsettings import jobs_oss_test
 import math
 import copy
 import time
@@ -235,16 +237,20 @@ class Scheduler:
                                                                                          True)
                     else:
                         print("Waiting for 60s before staring next operation...")
-                        time.sleep(60)
+                        time.sleep(1)
                         print("Wait completed...")
 
-                    jobs_master = self.__operations.get_jobs(job_file)
+                    # jobs_master = self.__operations.get_jobs(job_file)
+
+                    # DELETE
+                    jobs_master = jobs_oss_test
+                    # jobs_master = self.__operations.get_jobs(PROJECT_FOLDER_PATH + 'code/jobs-of-interest.txt')
 
                     [machine_start, machine_end, machine_increment] = self.__operations.get_machine_settings(trace_id,
                                                                                                              day,
                                                                                                              core)
 
-                    machine_start = 560
+                    machine_start = 2
                     for machine_num in range(machine_start, machine_end+1, machine_increment):
                         data = ""
                         data += "{}; {}; {}; {}; {}; ".format(num, slack, standard_deviation, machine_num, value)
@@ -253,15 +259,15 @@ class Scheduler:
 
                         jobs = copy.deepcopy(jobs_master)
                         machines = copy.deepcopy(machines_master)
-                        greedy_balanced = AlgorithmOSScheduling(jobs, machines, slack)
+                        greedy_balanced = AlgorithmOSSchedulingO(jobs, machines, slack)
                         results_gb = greedy_balanced.execute()
                         data += "{}; {}; {}; {}; {}; {}; ".format(results_gb[0], results_gb[1], results_gb[2],
                                                                   results_gb[3], results_gb[4], results_gb[5])
 
-                        """
+
                         jobs = copy.deepcopy(jobs_master)
                         machines = copy.deepcopy(machines_master)
-                        greedy_bestfit = AlgorithmGBestFitBF(jobs, machines)
+                        greedy_bestfit = AlgorithmOSScheduling(jobs, machines, slack)
                         results_gbf = greedy_bestfit.execute()
                         data += "{}; {}; {}; {}; {}; {}; ".format(results_gbf[0], results_gbf[1], results_gbf[2],
                                                                   results_gbf[3], results_gbf[4], results_gbf[5])
@@ -269,7 +275,7 @@ class Scheduler:
                         optimal_load = max(results_gb[4], results_gbf[4])
 
                         data += "{}; ".format(optimal_load)
-                        """
+
                         print(data)
 
                         data += "\n"

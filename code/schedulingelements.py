@@ -85,19 +85,26 @@ class Container:
         self.__end_time = None
         self.__vacant_size = None
         self.__machine = None
+        self.__type = None
 
-    def assign(self, job, start_time, end_time, machine_id):
+    def assign(self, job, start_time, end_time, machine_id, container_type=0):
         self.__job = job
         self.__start_time = start_time
         self.__end_time = end_time
         self.__machine = machine_id
         self.__vacant_size = 0
+        self.__type = container_type
 
     def reserve(self, start_time, end_time, vacant_size, machine_id):
         self.__start_time = start_time
         self.__end_time = end_time
         self.__vacant_size = vacant_size
         self.__machine = machine_id
+
+    def update(self, start_time, end_time, container_type):
+        self.__start_time = start_time
+        self.__end_time = end_time
+        self.__type = container_type
 
     def get_id(self):
         return self.__id
@@ -116,6 +123,9 @@ class Container:
 
     def get_vacant_size(self):
         return self.__vacant_size
+
+    def get_type(self):
+        return self.__type
 
     def get_details(self):
         if self.__vacant_size > 0:
@@ -150,6 +160,7 @@ class Machine:
 
     def update(self, container, completion_time):
         self.__schedule.append(container)
+        self.sort_containers_ascending_start_time()
         self.__available_time = completion_time
 
     def attach(self, container):
@@ -160,6 +171,33 @@ class Machine:
 
     def get_available_time(self):
         return self.__available_time
+
+    def get_scheduled_containers(self):
+        return self.__schedule
+
+    def get_container_index(self, reference_time):
+        c_start = 0
+        c_end = len(self.__schedule) - 1
+        while True:
+            c_mid = int((c_start + c_end) / 2)
+            if c_mid == c_start == c_end:
+                if self.__schedule[-1].get_end_time() <= reference_time:
+                    return None
+                else:
+                    return c_mid
+
+            start_time = self.__schedule[c_mid].get_start_time()
+            end_time = self.__schedule[c_mid].get_end_time()
+            if start_time > reference_time:
+                c_end = c_mid - 1
+            if end_time <= reference_time:
+                c_start = c_mid + 1
+            if start_time == reference_time or start_time <= reference_time < end_time:
+                return c_mid
+
+    def sort_containers_ascending_start_time(self):
+        if len(self.__schedule) > 0:
+            self.__schedule.sort(key=lambda c: c.get_start_time(), reverse=False)
 
     def get_schedule(self):
         schedule = 'Machine ' + str(self.__machine_id) + ':'

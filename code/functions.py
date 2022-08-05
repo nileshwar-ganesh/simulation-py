@@ -285,7 +285,7 @@ class Operations:
             elif os.path.isdir(os.path.join(STATISTICAL_TRACE_FOLDER, content)):
                 shutil.rmtree(os.path.join(STATISTICAL_TRACE_FOLDER, content))
 
-        os.makedirs(os.path.join(STATISTICAL_TRACE_FOLDER,'runningtrace'))
+        os.makedirs(os.path.join(STATISTICAL_TRACE_FOLDER, 'runningtrace'))
 
     @staticmethod
     def __get_trace_file_name(trace_id, day):
