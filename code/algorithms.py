@@ -963,12 +963,85 @@ class AlgorithmGBestFitBF(Algorithm):
 class AlgorithmOSScheduling(Algorithm):
 
     def __init__(self, jobs, machines, epsilon):
-        super().__init__("onlineslackscheduling", jobs, machines)
-        self.__reference_time = 0
+        super().__init__('slack', jobs, machines)
         self.__epsilon = epsilon
-        self.__working_list = []
-        self.__v_accept = {}
-        self.__v_min = {}
+        self.__array_length = 260000
+        self.__v_start = np.zeros(self.__array_length)
+        self.__v_end = np.zeros(self.__array_length)
+        self.__tau_values = [0]
+        self.__d_min = 0
+        self.__fp_epsilon_m = None
+
+    def execute(self):
+        self.__calculate_threshold_expression()
+        print(self.__fp_epsilon_m)
+        while len(super().get_job_list()) > 0:
+            job = super().get_job_fifo()
+            self.__run_acceptance_check(job)
+
+        for job in super().get_accepted_jobs():
+            job.print_details()
+
+    def __calculate_threshold_expression(self):
+        # this works, verified with recursive equation
+        cp_epsilon_1 = (1 + self.__epsilon) / self.__epsilon
+        expression_1 = 1 + self.__epsilon
+        expression_2 = cp_epsilon_1 ** (1 / super().get_machine_num()) - 1
+        expression = expression_1 * expression_2
+        self.__fp_epsilon_m = 1 / expression
+
+    def __calculate_v_start_array(self, job):
+        limit_2 = job.get_release_time()
+        limit_3 = job.get_release_time() + job.get_processing_time()
+
+        array_1 = np.zeros(limit_2 + 1)
+        array_2 = np.array([i for i in range(1, limit_3 - limit_2)])
+        array_3 = np.ones(self.__array_length - limit_3) * job.get_processing_time()
+        self.__v_start_job = np.hstack((array_1, array_2, array_3))
+        self.__v_start += self.__v_start_job
+
+    def __calculate_v_end_array(self, job):
+        limit_2 = job.get_due_time() - job.get_processing_time()
+        limit_3 = job.get_due_time()
+
+        array_1 = np.zeros(limit_2 + 1)
+        array_2 = np.array([i for i in range(1, limit_3 - limit_2)])
+        array_3 = np.ones(self.__array_length - limit_3) * job.get_processing_time()
+        self.__v_end_job = np.hstack((array_1, array_2, array_3))
+        self.__v_end += self.__v_end_job
+
+    def __update_v_values(self, job):
+        self.__calculate_v_start_array(job)
+        self.__calculate_v_end_array(job)
+
+    def __calculate_v_min(self, t, t_prime):
+        return max(0, self.__v_end[t_prime] - self.__v_start[t])
+
+    def __update_d_min(self, job, compensation_load):
+        job_release_time = job.get_release_time()
+        # the maximum known so far remains at the last due date known
+        max_load_val = max(self.__v_end[self.__tau_values[-1]] - self.__v_end[job_release_time], 0)
+        total_load = compensation_load + max_load_val
+        self.__d_min = job_release_time + (total_load / self.__fp_epsilon_m)
+
+    def __run_acceptance_check(self, job):
+        job_release_time = job.get_release_time()
+        job_due_time = job.get_due_time()
+        self.__d_min = max(self.__d_min, job_release_time)
+        expression_1 = (self.__d_min - job_release_time) * self.__fp_epsilon_m
+        if self.__d_min > self.__tau_values[-1]:
+            _d_min = self.__tau_values[-1]
+        else:
+            _d_min = round(self.__d_min)
+        expression_2 = self.__v_end[_d_min] - self.__v_end[job_release_time]
+        compensation_load = max(0, expression_1 - expression_2)
+        if job_due_time >= self.__d_min:
+            super().update_accepted(job)
+            self.__tau_values.append(job_due_time)
+            self.__update_v_values(job)
+            self.__update_d_min(job, compensation_load)
+        else:
+            super().update_rejected(job)
 
 
 class AlgorithmRegion(Algorithm):

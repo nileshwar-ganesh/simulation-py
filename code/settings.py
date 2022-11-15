@@ -4,7 +4,8 @@ PROJECT_FOLDER_PATH = '/home/nileshwar-gk/Projects/simulation-py/'
 SOURCE_FOLDER_PATH = '/home/nileshwar-gk/Projects/simulation-py/'
 
 CLOUD_TRACE_FOLDER = {'2011': SOURCE_FOLDER_PATH + 'cloudjobs/google2011/',
-                      '2019A': SOURCE_FOLDER_PATH + 'cloudjobs/google2019a/'}
+                      '2019A': SOURCE_FOLDER_PATH + 'cloudjobs/google2019a/',
+                      '2019E': SOURCE_FOLDER_PATH + 'cloudjobs/google2019e/'}
 
 SLACK_FOLDER = {'JV': SOURCE_FOLDER_PATH + 'lognormalslacks/JAVA/',
                 'MA': SOURCE_FOLDER_PATH + 'lognormalslacks/MATLAB/',
@@ -32,8 +33,8 @@ SLACKS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 SD = [3.0, 2.9, 2.8, 2.7, 2.6, 2.5, 2.4, 2.3, 2.2, 2.1, 2.0]
 
 MI2011 = {1: 10, 30: 20, 120: 50, 500: 100, 5000: 200}
-RAW = {'2011': 'GoogleTrace', '2019A': 'GoogleTrace2019'}
-TRACE = {'2011': "GoogleTrace2011", '2019A': "GoogleTrace2019A"}
+RAW = {'2011': 'GoogleTrace', '2019A': 'GoogleTrace2019', '2019E': 'GoogleTrace2019E'}
+TRACE = {'2011': "GoogleTrace2011", '2019A': "GoogleTrace2019A", '2019E': "GoogleTrace2019E"}
 
 # MACHINE SETTINGS
 MACHINE_START = {'2019A': {1: 50, 30: 100, 120: 200, 5000: 1000}}
