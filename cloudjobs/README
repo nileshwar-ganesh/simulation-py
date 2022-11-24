@@ -11,7 +11,7 @@ The folder structure should be
 ----------------------------------------------------------------------------
 Description about how trace files are generated:
 
-We have extracted following data from recorded trace details
+I have extracted following data from recorded trace details
 1. start time
 2. halt time
 3. number of sub tasks for each job

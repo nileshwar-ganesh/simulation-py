@@ -1,13 +1,11 @@
 import copy
-import os
 import sys
 import time
 import math
 import numpy as np
 import copy as cp
-from functions import Operations
-from settings import RESULT_FOLDER
-from schedulingelements import Job, Container, Machine
+from code.functions import Operations
+from code.schedulingelements import Container
 
 
 class Algorithm:
@@ -965,7 +963,7 @@ class AlgorithmOSScheduling(Algorithm):
     def __init__(self, jobs, machines, epsilon):
         super().__init__('slack', jobs, machines)
         self.__epsilon = epsilon
-        self.__array_length = 260000
+        self.__array_length = 260000  # release date + 2 * processing time (86400)
         self.__v_start = np.zeros(self.__array_length)
         self.__v_end = np.zeros(self.__array_length)
         self.__tau_values = [0]
@@ -973,14 +971,25 @@ class AlgorithmOSScheduling(Algorithm):
         self.__fp_epsilon_m = None
 
     def execute(self):
+        # start time point reference
+        simulation_start_time = time.time()
+        # sort all jobs in ascending order
+        super()._sort_jobs_ascending_release_time()
+        # calculate threshold value
         self.__calculate_threshold_expression()
-        print(self.__fp_epsilon_m)
+        # for every job in the list, do
         while len(super().get_job_list()) > 0:
             job = super().get_job_fifo()
             self.__run_acceptance_check(job)
 
-        for job in super().get_accepted_jobs():
-            job.print_details()
+        # end time point reference
+        simulation_end_time = time.time()
+        execution_time = round(simulation_end_time - simulation_start_time, 4)
+        super().update_execution_time(execution_time)
+        # updating the run time logs
+        super()._update_logs()
+        # returning the result of the simulation
+        return super()._results()
 
     def __calculate_threshold_expression(self):
         # this works, verified with recursive equation
@@ -1090,35 +1099,35 @@ class AlgorithmRegion(Algorithm):
             # status is 2, if there are no more small jobs left for preemption
             status = self.__preemption_routine()
 
-            if status:
-                continue
-            else:
-                # all released jobs till now are available
-                self.__available_jobs += self.__released_jobs
-                self.__released_jobs = []
-                # jobs need to be scheduled in SPT order
-                self.__available_jobs.sort(key=lambda j: j.get_processing_time(), reverse=False)
-                while len(self.__available_jobs) > 0:
-                    # if there exists at least one machine, which has processing power before next incoming job
-                    # schedule from available jobs
-                    super()._sort_machines_descending_avail_time()
-                    earliest_available_time = super().get_machine_list()[-1].get_available_time()
-                    # if there are additional jobs which are released in between, then we need to consider then first
-                    if earliest_available_time >= incoming_time:
-                        break
-                    job = self.__available_jobs.pop(0)
-                    # check whether the job has enough cores to complete
-                    # considering multi-core jobs, last core for job c = m - job_core
-                    legal_completion_status = self.__check_legal_completion(job)
-                    if not legal_completion_status:
-                        continue
-                    # check whether the job can be legally completed before due time on available cores
-                    # greedy acceptance policy
-                    acceptance_status = self.__check_acceptance_status(job)
-                    if not acceptance_status:
-                        continue
-                    # allocate job based on greedy balanced allocation policy
-                    self.__allocate_greedy_bestfit(job)
+            #if status:
+            #    continue
+            #else:
+            # all released jobs till now are available
+            self.__available_jobs += copy.deepcopy(self.__released_jobs)
+            self.__released_jobs = []
+            # jobs need to be scheduled in SPT order
+            self.__available_jobs.sort(key=lambda j: j.get_processing_time(), reverse=False)
+            while len(self.__available_jobs) > 0:
+                # if there exists at least one machine, which has processing power before next incoming job
+                # schedule from available jobs
+                super()._sort_machines_descending_avail_time()
+                earliest_available_time = super().get_machine_list()[-1].get_available_time()
+                # if there are additional jobs which are released in between, then we need to consider then first
+                if earliest_available_time >= incoming_time:
+                    break
+                job = self.__available_jobs.pop(0)
+                # check whether the job has enough cores to complete
+                # considering multi-core jobs, last core for job c = m - job_core
+                legal_completion_status = self.__check_legal_completion(job)
+                if not legal_completion_status:
+                    continue
+                # check whether the job can be legally completed before due time on available cores
+                # greedy acceptance policy
+                acceptance_status = self.__check_acceptance_status(job)
+                if not acceptance_status:
+                    continue
+                # allocate job based on greedy balanced allocation policy
+                self.__allocate_greedy_bestfit(job)
 
         # end time point reference
         simulation_end_time = time.time()
@@ -1143,7 +1152,7 @@ class AlgorithmRegion(Algorithm):
             super()._sort_machines_descending_avail_time()
             status_assigned = False
             for m in range(0, super().get_machine_num()):
-                # if machine does not even have a single container, no need of preemption
+                # if machine does not have even a single container, no need of preemption
                 # exit preemption routine for this machine and check other machines
                 if len(super().get_machine_list()[m].get_scheduled_containers()) <= 0:
                     continue

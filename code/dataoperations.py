@@ -1,5 +1,5 @@
 import os
-from settings import CLOUD_TRACE_FOLDER
+from code.settings import CLOUD_TRACE_FOLDER
 
 # Summarize cloud traces
 def generate_data_tables(trace_id):

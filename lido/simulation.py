@@ -1,15 +1,10 @@
-import sys
-
-from functions import Operations
-from algorithms import AlgorithmGBalanced, AlgorithmGBestFit, AlgorithmThreshold, AlgorithmGMinIdle
-from algorithms import AlgorithmGBalancedBF, AlgorithmGBestFitBF
-# from algorithms import AlgorithmOSScheduling
-from testalgorithm import AlgorithmOSScheduling, AlgorithmOSSchedulingO
-from settings import SETS, SLACKS, SD
-from settings import STATISTICAL_TRACE_FOLDER, RESULT_FOLDER, PROJECT_FOLDER_PATH
-from settings import MACHINE_START
-from datetime import datetime
-from testsettings import jobs_oss_test
+from code.functions import Operations
+from code.algorithms import AlgorithmGBalanced, AlgorithmGBestFit, AlgorithmThreshold, AlgorithmGMinIdle
+from code.algorithms import AlgorithmGBalancedBF, AlgorithmGBestFitBF
+from code.algorithms import AlgorithmOSScheduling, AlgorithmRegion
+from code.settings import SLACKS, SD
+from code.settings import RESULT_FOLDER
+from code.settings import MACHINE_START
 import math
 import copy
 import time
@@ -211,10 +206,10 @@ class Scheduler:
             result_file = RESULT_FOLDER + file_name
             with open(result_file, "w") as file:
                 header = "SET; SLACK; SD; MACHINES; DENOMINATOR; "
-                header += "ACC JOBS GB-BF; REJ JOBS GB-BF; ACC LOAD GB-BF; " \
-                          "REJ LOAD GB-BF; TOT LOAD GB-BF; RUN TIME GB-BF; "
-                header += "ACC JOBS GBF-BF; REJ JOBS GBF-BF; ACC LOAD GBF-BF;" \
-                          " REJ LOAD GBF-BF; TOT LOAD GBF-BF; RUN TIME GBF-BF; "
+                header += "ACC JOBS OSS; REJ JOBS OSS; ACC LOAD OSS; " \
+                          "REJ LOAD OSS; TOT LOAD OSS; RUN TIME OSS; "
+                header += "ACC JOBS REG; REJ JOBS REG; ACC LOAD REG;" \
+                          " REJ LOAD REG; TOT LOAD REG; RUN TIME REG; "
                 header += "OPT LOAD BF; "
                 header += "\n"
                 file.write(header)
@@ -240,17 +235,12 @@ class Scheduler:
                         time.sleep(1)
                         print("Wait completed...")
 
-                    # jobs_master = self.__operations.get_jobs(job_file)
-
-                    # DELETE
-                    jobs_master = jobs_oss_test
-                    # jobs_master = self.__operations.get_jobs(PROJECT_FOLDER_PATH + 'code/jobs-of-interest.txt')
+                    jobs_master = self.__operations.get_jobs(job_file)
 
                     [machine_start, machine_end, machine_increment] = self.__operations.get_machine_settings(trace_id,
                                                                                                              day,
                                                                                                              core)
 
-                    machine_start = 2
                     for machine_num in range(machine_start, machine_end+1, machine_increment):
                         data = ""
                         data += "{}; {}; {}; {}; {}; ".format(num, slack, standard_deviation, machine_num, value)
@@ -259,20 +249,19 @@ class Scheduler:
 
                         jobs = copy.deepcopy(jobs_master)
                         machines = copy.deepcopy(machines_master)
-                        greedy_balanced = AlgorithmOSSchedulingO(jobs, machines, slack)
-                        results_gb = greedy_balanced.execute()
-                        data += "{}; {}; {}; {}; {}; {}; ".format(results_gb[0], results_gb[1], results_gb[2],
-                                                                  results_gb[3], results_gb[4], results_gb[5])
-
+                        alg_oss = AlgorithmOSScheduling(jobs, machines, slack)
+                        results_oss = alg_oss.execute()
+                        data += "{}; {}; {}; {}; {}; {}; ".format(results_oss[0], results_oss[1], results_oss[2],
+                                                                  results_oss[3], results_oss[4], results_oss[5])
 
                         jobs = copy.deepcopy(jobs_master)
                         machines = copy.deepcopy(machines_master)
-                        greedy_bestfit = AlgorithmOSScheduling(jobs, machines, slack)
-                        results_gbf = greedy_bestfit.execute()
-                        data += "{}; {}; {}; {}; {}; {}; ".format(results_gbf[0], results_gbf[1], results_gbf[2],
-                                                                  results_gbf[3], results_gbf[4], results_gbf[5])
+                        alg_region = AlgorithmRegion(jobs, machines, slack)
+                        results_reg = alg_region.execute()
+                        data += "{}; {}; {}; {}; {}; {}; ".format(results_reg[0], results_reg[1], results_reg[2],
+                                                                  results_reg[3], results_reg[4], results_reg[5])
 
-                        optimal_load = max(results_gb[4], results_gbf[4])
+                        optimal_load = max(results_oss[4], results_reg[4])
 
                         data += "{}; ".format(optimal_load)
 
@@ -282,8 +271,6 @@ class Scheduler:
                         with open(result_file, "a") as file:
                             file.write(data)
                         file.close()
-
-                        sys.exit()
 
         self.__operations.update_parallel_log(day, core, 'end')
 

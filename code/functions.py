@@ -1,15 +1,14 @@
 import math
-import sys
 import os
 import shutil
 
 from datetime import datetime
-from settings import CLOUD_TRACE_FOLDER, SLACK_FOLDER, STATISTICAL_TRACE_FOLDER
-from settings import RESULT_FOLDER, LOG_FOLDER
-from settings import RAW
-from settings import TRACE, DAYS, SLACKS, SD, MI2011, SETS
-from schedulingelements import Job, Machine
-from settings import MACHINE_START, MACHINE_END, MACHINE_INCREMENT
+from code.settings import CLOUD_TRACE_FOLDER, SLACK_FOLDER, STATISTICAL_TRACE_FOLDER
+from code.settings import RESULT_FOLDER, LOG_FOLDER
+from code.settings import RAW
+from code.settings import TRACE, DAYS, SLACKS, SD, SETS
+from code.schedulingelements import Job, Machine
+from code.settings import MACHINE_START, MACHINE_END, MACHINE_INCREMENT
 
 
 class Operations:

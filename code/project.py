@@ -1,17 +1,6 @@
-import os
-import sys
-import copy
-import math
-
-from schedulingelements import Job, Container, Machine
-from functions import Operations
-from simulation import Scheduler
-from datetime import datetime
+from code.functions import Operations
+from lido.simulation import Scheduler
 from multiprocessing import Pool
-from settings import TEST_DATA, RESULT_FOLDER, STATISTICAL_TRACE_FOLDER
-from settings import DAYS, SLACKS, SD, MI2011, SETS
-from algorithms import AlgorithmGBalanced, AlgorithmGBestFit, AlgorithmThreshold, AlgorithmGMinIdle
-from settings import MACHINE_END
 
 
 def _run_simulation():
