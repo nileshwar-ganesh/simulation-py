@@ -324,17 +324,27 @@ class Scheduler:
                 jobs = copy.deepcopy(jobs_master)
                 machines = self.__operations.get_machines(machine)
 
-                greedybalanced = AlgorithmGBalanced(jobs, machines)
+                greedybestfit= AlgorithmGBestFit(jobs, machines)
                 [accepted_jobs, rejected_jobs, accepted_load,
-                 rejected_load, optimal_load, execution_time] = greedybalanced.execute()
+                 rejected_load, optimal_load, execution_time] = greedybestfit.execute()
+                '''
+                print("Start {} End {} Mid {}".format(start_idx, end_idx, mid_idx))
 
-                if accepted_load + rejected_load == optimal_load:
+                print("Accepted {} Total {} Machines {} STATUS : {}".format(accepted_load,
+                                                                            total_load,
+                                                                            machine,
+                                                                            accepted_load == total_load))
+                '''
+                if accepted_load == optimal_load:
                     end_idx = mid_idx
-                elif accepted_load + rejected_load > optimal_load:
+                else:
                     start_idx = mid_idx
 
+                if start_idx > end_idx:
+                    break
+
                 if end_idx == start_idx + 1:
-                    counter += 1
+                    break
 
                 if counter == 2:
                     break
@@ -344,3 +354,36 @@ class Scheduler:
                 file.write(data)
                 print("Completed for day {}.".format(day))
             file.close()
+
+    def run_specific_day_machine_end(self, day, trace_id, core, slack_set, num, machine_num, slacks=SLACKS, sd=SD):
+        details = True
+        trace_jobs = self.__operations.read_jobs_iso(trace_id, day, core)
+
+        total_load = 0
+        for job in trace_jobs:
+            total_load += job.get_processing_time() * job.get_job_core()
+
+        print("Started for day {}.".format(day))
+        if details:
+            slack = 0.1
+            standard_deviation = 0.05
+
+            self.__operations.generate_statistical_trace_iso(trace_jobs, trace_id, day, core,
+                                                             slack_set, slack, standard_deviation, num)
+
+            job_file = self.__operations.get_statistical_trace_file_location(trace_id, day, slack, standard_deviation,
+                                                                             core, num, True)
+
+            jobs_master = self.__operations.get_jobs(job_file)
+
+            jobs = copy.deepcopy(jobs_master)
+            machines = self.__operations.get_machines(machine_num)
+
+            greedybalanced = AlgorithmGBestFit(jobs, machines)
+            [accepted_jobs, rejected_jobs, accepted_load,
+             rejected_load, optimal_load, execution_time] = greedybalanced.execute()
+
+            print("Accepted {} Total {} STATUS : {}".format(accepted_load, total_load, accepted_load == total_load))
+
+
+
