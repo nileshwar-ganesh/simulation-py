@@ -64,4 +64,4 @@ if __name__ == '__main__':
     operations.clear_all_trace_files()
     operations.clear_all_results()
     operations.clear_all_logs()
-    # _run_simulation()
+    _run_simulation()

@@ -1,3 +1,6 @@
+import math
+import copy
+import time
 from code.functions import Operations
 from code.algorithms import AlgorithmGBalanced, AlgorithmGBestFit, AlgorithmThreshold, AlgorithmGMinIdle
 from code.algorithms import AlgorithmGBalancedBF, AlgorithmGBestFitBF
@@ -5,9 +8,6 @@ from code.algorithms import AlgorithmOSScheduling, AlgorithmRegion
 from code.settings import SLACKS, SD
 from code.settings import RESULT_FOLDER
 from code.settings import MACHINE_START
-import math
-import copy
-import time
 
 
 class Scheduler:
@@ -324,7 +324,7 @@ class Scheduler:
                 jobs = copy.deepcopy(jobs_master)
                 machines = self.__operations.get_machines(machine)
 
-                greedybestfit= AlgorithmGBestFit(jobs, machines)
+                greedybestfit= AlgorithmGBalanced(jobs, machines)
                 [accepted_jobs, rejected_jobs, accepted_load,
                  rejected_load, optimal_load, execution_time] = greedybestfit.execute()
                 '''
@@ -335,16 +335,13 @@ class Scheduler:
                                                                             machine,
                                                                             accepted_load == total_load))
                 '''
-                if accepted_load == optimal_load:
+                if accepted_load + rejected_load == optimal_load:
                     end_idx = mid_idx
-                else:
+                elif accepted_load + rejected_load > optimal_load:
                     start_idx = mid_idx
 
-                if start_idx > end_idx:
-                    break
-
                 if end_idx == start_idx + 1:
-                    break
+                    counter += 1
 
                 if counter == 2:
                     break
@@ -379,11 +376,12 @@ class Scheduler:
             jobs = copy.deepcopy(jobs_master)
             machines = self.__operations.get_machines(machine_num)
 
-            greedybalanced = AlgorithmGBestFit(jobs, machines)
+            greedybalanced = AlgorithmGBalanced(jobs, machines)
             [accepted_jobs, rejected_jobs, accepted_load,
              rejected_load, optimal_load, execution_time] = greedybalanced.execute()
 
-            print("Accepted {} Total {} STATUS : {}".format(accepted_load, total_load, accepted_load == total_load))
+            print("Accepted {} Total {} STATUS : {}".format(accepted_load, total_load,
+                                                            accepted_load + rejected_load == optimal_load))
 
 
 
