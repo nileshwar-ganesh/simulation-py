@@ -963,7 +963,7 @@ class AlgorithmOSScheduling(Algorithm):
     def __init__(self, jobs, machines, epsilon):
         super().__init__('slack', jobs, machines)
         self.__epsilon = epsilon
-        self.__array_length = 260000  # release date + 2 * processing time (86400)
+        self.__array_length = 450000  # release date + 2 * processing time (86400)
         self.__v_start = np.zeros(self.__array_length)
         self.__v_end = np.zeros(self.__array_length)
         self.__tau_values = [0]

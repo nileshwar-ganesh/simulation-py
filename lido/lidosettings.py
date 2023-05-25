@@ -144,6 +144,23 @@ class Lido:
         return Lido.generate_batches(lido_parameters, lido_cores)
 
     @staticmethod
+    def c1202019ap(trace_id, core, slack_set, set_num, lido_cores):
+        no_split = [2, 3, 4, 5, 6, 7, 8, 9,
+                    10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+        two_split = [1, 29]
+        three_split = [20, 24, 25, 26, 27, 28]
+        five_split = [21, 22, 23]
+        nine_split = [30]
+        sd_split_four = []
+        sd_split_two = []
+        sd_split_one = [31]
+
+        lido_parameters = Lido.parallelization_parameters(trace_id, core, slack_set, set_num,
+                                                          no_split, two_split, three_split, five_split, nine_split,
+                                                          sd_split_four, sd_split_two, sd_split_one)
+        return Lido.generate_batches(lido_parameters, lido_cores)
+
+    @staticmethod
     def test(trace_id, core, slack_set, set_num, lido_cores):
         no_split = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
                     11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
